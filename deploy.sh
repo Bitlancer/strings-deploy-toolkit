@@ -2,16 +2,16 @@
 
 
 #variables
-log="/root/git/repos/ahuffman/hello-world/deploy/deploy.log" #log path
+log="/var/log/bitlancer-deploy.log" #log path
 host="" #used for deploying to a host or many hosts
 gitrepo=""
 giturl=""
 gitclone=0
-datacontainer="" #openstack/rackspace storage container
-datauser=""
-datapass=""
-gitreopuser=""
-gitrepopass=""
+oscontainer="" #openstack/rackspace storage container
+osuser=""
+oskey=""
+osauthurl=""
+ospath=""
 gitrepobranch=""
 gitrepobranchflag=0
 gitversion=$(git --version)
@@ -29,18 +29,17 @@ ConfSelSwift=0 #Set by ConfSelector function.  Used for configuring swift contai
 PullSelGit=0 #Set by PullSelector function.  Used for pulling git repos.
 PullSelSwift=0 #Set by PullSelector function. Used for pulling swift containers.
 gitremoteexist=0 #Set by GitRemoteCheck function. Used in various places as a verification mechanism.
-dirroot="" #Set by ConfSelector and used by CreateDir function.
-dirname="" #Set by ConfSelector and used by CreateDir function.
+dirpath="" #Needs to be set by directory check functions for use with CreateDir function
 dirsuccess=0 #Set by CreateDir function and used for verification in GitConf and SwiftConf.
-gitrepohome="/root/git/repos/ahuffman/" #Where working repos live.
-datahome="/root/swift/" #Where cached openstack swift/cloud files live.
-wwwhome="/var/www/" #wwwroot on the system; if using virtual hosts specify -w and the path on the command line
+gitrepohome=~/deploy/repodata/ #Where working repos live.
+datahome=~/deploy/osdata/ #Where cached openstack swift/cloud files live.
+landinghome="/var/www/html/" #Where you want the data to land; if using virtual hosts specify -l and the path on the command line
+scriptdebugflag=0
 operationsuccess=0
 operationfail=0
 
 #Setup Logging
-  echo > $log
-  echo "------------------------------------------------------------------------------------------" >> $log
+  echo "------------------------------------------------------------------------------------------" >> $log #run separator
   date >> $log
 
 function logger {
@@ -69,8 +68,8 @@ function script_usage {
   echo "-v Verbose: Provides status in console."
   echo
   echo "Git Usage:"
-  echo "  Cloning a git repository and deploying to your www directory:"
-  echo "  deploy.sh -f -g <arg> [-b <arg> -w <arg>]"
+  echo "  Cloning a git repository and deploying to your landing directory:"
+  echo "  deploy.sh -f -g <arg> [-b <arg> -l <arg>]"
   echo "  Configuring git for storing of repository:"
   echo "  deploy.sh -c -g <arg> -r <arg>"
   echo "  See Git Related Options for further details."
@@ -78,7 +77,7 @@ function script_usage {
   echo "  deploy.sh -p -r <arg> (-b <arg> optional)"
   echo "  See Git Related Options for further details."
   echo "Git Related Options:"
-  echo "-f Completes a full git clone (-g required (-b -w optional))"
+  echo "-f Completes a full git clone (-g required (-b -l optional))"
   echo "-c Configures git (-g -r required)"
   echo "-p Pulls git repository (-r required)"
   echo "-r <Git Repository/Project Shortname>"
@@ -90,25 +89,84 @@ function script_usage {
   echo "Global Script Options:"
   echo "-e Debug Mode"
   echo "-v Verbose: Provides status in console."
-  echo "-w <www path> Final destination of your repository code/files. Default is /var/www/html/.  This will override default."
+  echo "-L <landing path> Final destination of your repository code/files. Default is /var/www/html/.  This will override default."
   }  
 
-#Debugging.  Use this to obtain some debugging information from the script. Activated by -e flag.
 function script_debug {
-  echo "gitrepohome="$gitrepohome
-  echo "gitversion="$gitversion
-  echo "gitbinpath="$gitbinpath
-  echo "gitrepo="$gitrepo
-  echo "giturl="$giturl
-  echo "gitrepobranch="$gitrepobranch
-  echo "datacontainer="$datacontainer
-  echo "datauser="$datauser
-  echo "datapass="$datapass
-  echo "gitrepouser="$gitrepouser
-  echo "gitrepopass="$gitrepopass
-  echo "host="$host
-  echo "log_verbose="$log_verbose
-  echo "log_string="$log_string
+#Debugging.  Use this to obtain some debugging information from the script. Activated by -d flag. 
+#spits all the varible values into the log and if verbose is selected it will spit to the console.
+#add this before exits in functions or anywhere that you want to obtain more information on script processing.
+if [ $scriptdebugflag -eq 1 ]
+then
+   log_string="log=$log"
+   logger
+   log_string="host=$host"
+   logger
+   log_string="gitrepo=$gitrepo="
+   logger
+   log_string="giturl=$giturl"
+   logger
+   log_string="gitclone=$gitclone"
+   logger
+   log_string="oscontainer=$oscontainer"
+   logger
+   log_string="osuser=$osuser="
+   logger
+   log_string="oskey=$oskey"
+   logger
+   log_string="osauthurl=$osauthurl"
+   logger
+   log_string="ospath=$ospath"
+   logger
+   log_string="gitrepobranch=$gitrepobranch"
+   logger
+   log_string="gitrepobranchflag=$gitrepobranchflag"
+   logger
+   log_string="gitversion=$gitversion"
+   logger
+   log_string="gitbinpath=$gitbinpath"
+   logger
+   log_string="gitcurrentbranch=$gitcurrentbranch"
+   logger
+   log_string="log_verbose=$log_verbose"
+   logger
+   log_string="PullSelectorFlag=$PullSelectorFlag"
+   logger
+   log_string="ConfSelectorFlag=$ConfSelectorFlag"
+   logger
+   log_string="gitrepoflag=$gitrepoflag"
+   logger
+   log_string="gitbranchflag=$gitbranchflag"
+   logger
+   log_string="giturlflag=$giturlflag"
+   logger
+   log_string="ConfSelGit=$ConfSelGit"
+   logger
+   log_string="ConfSelSwift=$ConfSelSwift"
+   logger
+   log_string="PullSelGit=$PullSelGit"
+   logger
+   log_string="PullSelSwift=$PullSelSwift"
+   logger
+   log_string="gitremoteexist=$gitremoteexist"
+   logger
+   log_string="dirpath=$dirpath"
+   logger
+   log_string="dirsuccess=$dirsuccess"
+   logger
+   log_string="gitrepohome=$gitrepohome"
+   logger
+   log_string="datahome=$datahome"
+   logger
+   log_string="landinghome=$landinghome"
+   logger
+   log_string="scriptdebugflag=$scriptdebugflag"
+   logger
+   log_string="operationsuccess=$operationsuccess"
+   logger
+   log_string="operationfail=$operationfail"
+   logger
+fi
 }
 
 function GitExistCheck {
@@ -131,7 +189,9 @@ then
 else
    log_string="Repository home: $gitrepohome does not exist."
    logger
-   exit 1
+   #create the directory
+   dirpath=${gitrepohome}
+   CreateDir   
 fi
 }
 
@@ -175,7 +235,9 @@ fi
 
 function CreateDir {
 #creates a new directory and verifies.
-   mkdir -p $dirroot$dirname 2>&1>>$log
+   log_string="Creating missing directory."
+   logger
+   mkdir -p $dirpath 2>&1>>$log
    if [ $? -eq 0 ]
    then
       log_string="Directory created."
@@ -224,17 +286,17 @@ else
 fi
 }
 
-function wwwHomeCheck {
-#checks for valid wwwhome
-log_string="Checking for www path $wwwhome"
+function LandingHomeCheck {
+#checks for valid landinghome
+log_string="Checking for landing path $landinghome"
 logger
-if [ -d $wwwhome ]
+if [ -d $landinghome ]
 then
-   log_string="www path exists."
+   log_string="landing path exists."
    logger
 else
    #we could choose to just create the path instead
-   log_string="www path does not exist. Exiting..."
+   log_string="landing path does not exist."
    logger
    exit 1
 fi
@@ -244,10 +306,10 @@ function CodeMove {
 #Takes pulled code from Git and moves into proper web directory
 log_string="Attempting to move code into place."
 logger
-#Check that the wwwhome exists
-wwwHomeCheck
-#move code from repodir to live www dir
-rsync -av --progress $gitrepohome$gitrepo/* /var/www/html/ --exclude .git 2>&1>>$log
+#Check that the landinghome exists
+LandingHomeCheck
+#move code from repodir to live landing dir
+rsync -av --progress $gitrepohome$gitrepo/* $landinghome --exclude .git 2>&1>>$log
 #Check if it went well
 if [ $? -eq 0 ]
 then
@@ -264,7 +326,7 @@ fi
 function DataMove {
 #Takes pulled data from Swift and moves into proper web directory
 echo
-#move code from cacheddir to live www dir
+#move code from cacheddir to landing dir
 }
 
 
@@ -485,7 +547,7 @@ then
    GitBranchCheck
    #Change to the proper branch we want to deploy
    GitBranchChange 
-   #Move the code into the wwwhome
+   #Move the code into the landinghome
    CodeMove
    #Cleanup
    cd $gitrepohome
@@ -597,7 +659,7 @@ logger
 
 #Pulling in options from shell.  Using getopts instead of getopt
 #Capturing options and suppressing getopts errors (leading : in getopts string) for our own error handling
-while getopts ":r:g:o:w:b:h:evdpcf-:" flag
+while getopts ":r:g:C:U:K:L:b:h:vdpcf-:" flag
   do
 #    echo "$flag" $OPTIND $OPTARG #for testing; will remove later
     #Error handling on missing arguments
@@ -629,19 +691,64 @@ while getopts ":r:g:o:w:b:h:evdpcf-:" flag
     case $flag in
        -)#parsing long option names
           case $OPTARG in
-             project) gitrepo="${!OPTIND}";gitrepoflag=1;OPTIND=$(( $OPTIND + 1 ));;
-          esac;;
+             config) #Configures a git repo locally to be able to later only pull in changes.
+                  ConfSelectorFlag=1;OPTIND=$(( $OPTIND + 1 ))
+             ;;
+             pull) #Pulls data based on variables fed.
+                  PullSelectorFlag=1;OPTIND=$(( $OPTIND + 1 ))
+             ;;
+             clone) #Completes a temporary git clone moves the code into place and then deletes the directory created.
+                  gitclone=1;OPTIND=$(( $OPTIND + 1 ))
+             ;;
+             project) #same as a git remote shortname
+                  gitrepo="${!OPTIND}";gitrepoflag=1;OPTIND=$(( $OPTIND + 1 ))
+             ;;
+             shortname) #same as a git project name
+                  gitrepo="${!OPTIND}";gitrepoflag=1#;OPTIND=$(( $OPTIND + 1 ))
+             ;;
+             branch) #git branch name to deploy.
+                  gitrepobranch="${OPTIND}";gitrepobranchflag=1;OPTIND=$(( $OPTIND + 1 ))
+             ;;
+             url) #git URL to a repository.  may be ssh or https style
+                  giturl="${!OPTIND}";giturlflag=1;OPTIND=$(( $OPTIND + 1 ));script_debug
+             ;;
+             container)#openstack swift container
+                  OPTIND=$(( $OPTIND + 1 ))
+             ;;
+             osauthurl)#openstack authentication URL
+                  OPTIND=$(( $OPTIND + 1 ))
+             ;;
+             osuser)#openstack user
+                  OPTIND=$(( $OPTIND + 1 ))
+             ;;
+             oskey)#openstack api key
+                  OPTIND=$(( $OPTIND + 1 ))
+             ;;
+             ospath)#openstack path to directory or file -- requirement of a container variable as well
+                  OPTIND=$(( $OPTIND + 1 ))
+             ;;
+             debug)#spits debugging into log
+                  scriptdebugflag=1;OPTIND=$(( $OPTIND + 1 ))
+             ;;
+             verbose)#directs echo output to console
+                  log_verbose=1;OPTIND=$(( $OPTIND + 1 ))
+             ;;
+             *) #unknown command
+                  log_string="Unrecognized long flag or argument";logger;exit 5
+             ;;
+          esac
+          ;;
        r) gitrepo=$OPTARG;gitrepoflag=1;;
        g) giturl=$OPTARG;giturlflag=1;;
-       o) datacontainer=$OPTARG;;
-#       k) datauser=$OPTARG;;
-#       s) datapass=$OPTARG;;
-#       u) gitrepouser=$OPTARG;;
-#       w) gitrepopass=$OPTARG;;
-       w) wwwhome=$OPTARG;;
+       C) oscontainer=$OPTARG;;
+       U) osuser=$OPTARG;;
+       K) oskey=$OPTARG;;
+       A) osauthurl=$OPTARG;;
+       P) ospath=$OPTARG;;
+       L) landinghome=$OPTARG;;
        b) gitrepobranch=$OPTARG;gitrepobranchflag=1;;
        h) host=$OPTARG;;
-       e) script_debug;;
+       d) scriptdebugflag=1;;
        v) log_verbose=1;;
        p) PullSelectorFlag=1;;
        c) ConfSelectorFlag=1;;
