@@ -12,10 +12,19 @@ osuser=""
 oskey=""
 osauthurl=""
 ospath=""
+osuserflag=0
+oskeyflag=0
+osauthurlflag=0
+ospathflag=0
+oscontainerflag=0
+oscontainerexist=0
+osauthpass=0
 gitrepobranch=""
 gitrepobranchflag=0
 gitversion=$(git --version)
 gitbinpath=$(which git)
+osswiftversion=$(swift --version)
+osswiftbinpath=$(which swift)
 gitcurrentbranch=""
 log_string=""
 log_verbose=0
@@ -33,7 +42,9 @@ dirpath="" #Needs to be set by directory check functions for use with CreateDir 
 dirsuccess=0 #Set by CreateDir function and used for verification in GitConf and SwiftConf.
 gitrepohome=~/deploy/repodata/ #Where working repos live.
 datahome=~/deploy/osdata/ #Where cached openstack swift/cloud files live.
-landinghome="/var/www/html/" #Where you want the data to land; if using virtual hosts specify -l and the path on the command line
+gitlandinghome="/var/www/html/" #Where you want the data to land if using virtual hosts specify -l and the path on the command line
+oslandinghome="/var/www/html/"
+landinghome="" #used prior to doing DataMove by each pull/clone function
 scriptdebugflag=0
 operationsuccess=0
 operationfail=0
@@ -102,7 +113,7 @@ then
    logger
    log_string="host=$host"
    logger
-   log_string="gitrepo=$gitrepo="
+   log_string="gitrepo=$gitrepo"
    logger
    log_string="giturl=$giturl"
    logger
@@ -110,13 +121,23 @@ then
    logger
    log_string="oscontainer=$oscontainer"
    logger
-   log_string="osuser=$osuser="
+   log_string="osuser=$osuser"
    logger
    log_string="oskey=$oskey"
    logger
    log_string="osauthurl=$osauthurl"
    logger
    log_string="ospath=$ospath"
+   logger
+   log_string="osuserflag=$osuserflag"
+   logger
+   log_string="oskeyflag=$oskeyflag"
+   logger
+   log_string="osauthurlflag=$osauthurlflag"
+   logger
+   log_string="ospathflag=$ospathflag"
+   logger
+   log_string="oscontainerflag=$oscontainerflag"
    logger
    log_string="gitrepobranch=$gitrepobranch"
    logger
@@ -286,11 +307,11 @@ else
 fi
 }
 
-function LandingHomeCheck {
+function GitLandingHomeCheck {
 #checks for valid landinghome
-log_string="Checking for landing path $landinghome"
+log_string="Checking for landing path $gitlandinghome"
 logger
-if [ -d $landinghome ]
+if [ -d $gitlandinghome ]
 then
    log_string="landing path exists."
    logger
@@ -302,14 +323,48 @@ else
 fi
 }
 
-function CodeMove {
-#Takes pulled code from Git and moves into proper web directory
-log_string="Attempting to move code into place."
+function OSSwiftLandingHomeCheck {
+#checks for valid landinghome
+log_string="Checking for landing path $oslandinghome"
+logger
+if [ -d $oslandinghome ]
+then
+   log_string="openstack swift landing path exists."
+   logger
+else
+   #we could choose to just create the path instead
+   log_string="landing path does not exist."
+   logger
+   exit 1
+fi
+}
+
+function OSSwiftDataHomeCheck {
+  #Checks for a valid temporary directory to store downloaded files prior to moving into place.
+  log_string="Checking for temporary data home $datahome."
+  logger
+  if [ -d $datahome ]
+  then
+     log_string="Data Home exists at $datahome."
+     logger
+  else
+     #create it
+     dirpath=${datahome}
+     CreateDir
+  fi
+}
+
+function DataMove {
+#Takes pulled code/data moves into proper web directory
+#Set your gitlandinghome or oslandinghome to landinghome and then use this.
+log_string="Attempting to move data into place."
 logger
 #Check that the landinghome exists
-LandingHomeCheck
+#LandingHomeCheck
 #move code from repodir to live landing dir
-rsync -av --progress $gitrepohome$gitrepo/* $landinghome --exclude .git 2>&1>>$log
+rsync -av --progress $dirpath* $landinghome --exclude .git 2>&1>>$log
+#clear dirpath just in case 
+dirpath=""
 #Check if it went well
 if [ $? -eq 0 ]
 then
@@ -323,11 +378,6 @@ else
 fi
 }
 
-function DataMove {
-#Takes pulled data from Swift and moves into proper web directory
-echo
-#move code from cacheddir to landing dir
-}
 
 
 function GitConf {
@@ -393,6 +443,8 @@ then
    cd $gitrepohome$gitrepo
    #change to user specified branch; master assumed on null
    GitBranchChange
+   #Check the landing path exists before we bother pulling it will fail if it doesn't
+   GitLandingHomeCheck
    #Pull in the code
    git pull $gitrepo $gitrepobranch 2>&1>>$log &
    #wait for it
@@ -420,7 +472,18 @@ then
       exit 1
    fi
    #Move the code into place
-   CodeMove
+   landinghome=${gitlandinghome}
+   log_string="Set landing to $landinghome"
+   logger
+   #set dirpath for datamove
+   dirpath="$gitrepohome$gitrepo/" # slash needed here
+   log_string="Trying to move data from $dirpath"
+   logger
+   #set dirpath for datamove
+   dirpath="$gitrepohome$gitrepo/"
+   log_string="Attempting to move data from $dirpath"
+   logger
+   DataMove
 else
    log_string="Git pull was not qualified. Check $log for more details."
    logger
@@ -428,12 +491,116 @@ fi
 }
 
 
+function OSSwiftContainerCheck {
+  #Does a swift stat to see if we can get access to the account
+  log_string="Checking that specified openstack swift container exists."
+  logger
+  swift -A $osauthurl -U $osuser -K $oskey list $oscontainer > /dev/null
+  if [ $? -eq 0 ]
+  then
+     log_string="Container $oscontainer exists."
+     logger
+     oscontainerexist=1
+  else
+     log_string="Container $oscontainer does not exist."
+     logger
+     oscontainerexist=0
+  fi
+}
 
 
-function SwiftPull {
-#Pulls stored data from Openstack or Rackspace
-echo
-#increment operation success if successful
+function OSSwiftAuthCheck {
+  log_string="Checking openstack swift client credentials"
+  logger
+  swift -A $osauthurl -U $osuser -K $oskey stat > /dev/null
+  if [ $? -eq 0 ]
+  then
+     log_string="Credentials working."
+     logger
+     osauthpass=1
+  else
+     log_string="Credentials not working, check your openstack authentication URL, username, and key for errors."
+     logger
+     osauthpass=0
+  fi
+}
+
+function OSSwiftExistCheck {
+  #Checks if swift is installed
+  if [[ $osswiftversion != *swift* ]]
+  then
+     #We could do an install of git here if desired
+     log_string="Error: openstack swift not installed"
+     logger
+     exit 1
+  else
+     log_string="swift exists: $osswiftversion"
+     logger
+  fi
+}
+
+function OSSwiftPull {
+  #Pulls stored data from Openstack or Rackspace
+  log_string="Attempting to pull openstack swift container."
+  logger
+  if [ $PullSelSwift -eq 1 ]
+  then
+      #Make sure swift exists
+      OSSwiftExistCheck  
+      #Make sure oslanding exists
+      OSSwiftLandingHomeCheck 
+      #Make sure datahome exists
+      OSSwiftDataHomeCheck
+      #Test openstack credentials
+      OSSwiftAuthCheck
+      if [ $osauthpass -eq 1 ]
+      then
+         #Make sure container exists
+         OSSwiftContainerCheck
+         if [ $oscontainerexist -eq 1 ]
+         then
+             #Make a directory to match the container name, we'll use the CreateDir function for validation
+             #Set the variables for function use
+             dirpath="$datahome$oscontainer"
+             log_string="Attempting to create directory $dirpath"
+             logger
+             CreateDir
+             #Change to the container directory
+             cd $datahome$oscontainer
+             #Complete the container pull
+             log_string="Swift Download:"
+             logger
+             swift -A $osauthurl -U $osuser -K $oskey download $oscontainer 2>&1>>$log
+             #wait for it
+             wait $!
+             #Move the data into place
+               #Set the landinghome to openstack landing home specified
+               landinghome=${oslandinghome}
+               log_string="Landing home set to $landinghome."
+               logger
+               dirpath="$datahome$oscontainer"
+               log_string="Attempting to move data from $dirpath"
+               logger
+               DataMove
+             #Cleanup
+             log_string="Cleaning up temporary files/directories."
+             logger
+
+
+         else
+             log_string="No valid openstack swift container to pull."
+             logger
+             operationfail=$((operationfail + 1))
+         fi
+      else
+         log_string="Can't pull from openstack swift with bad credentials."
+         logger
+         operationfail=$((operationfail + 1))
+      fi
+  else
+      log_string="openstack swift pull was not qualified. See log file $log for more details."
+      logger
+  fi
 }
 
 function GitRepoValidate {
@@ -457,7 +624,7 @@ logger
 log_string="Determining what to pull..."
 logger
 #Start checking for git pull
-log_string="Checking for git pull parameters."
+log_string="Checking for git pull parameters first."
 logger
 log_string="Checking for an existing repository home: $gitrepohome"
 logger
@@ -499,13 +666,34 @@ then
    fi
    #Try and do a git pull now that we've validated everything. It will fail if variables are not set properly after this validation
    GitPull
-   #Check for presence of swift required variables
 else
-   log_string="Missing arguments to pull a git repository."
+   log_string="Missing arguments to pull git a git repository."
    logger
 fi
 #Done with git
-#Start checking for swift
+#Start checking for openstack swift
+#Check for all required swift options first
+if [[ $PullSelectorFlag -eq 1 && $osauthurlflag -eq 1 && $osuserflag -eq 1 && $oskeyflag -eq 1 && $oscontainerflag -eq 1 ]]
+then
+    #Did the user specify an openstack path
+    if [ $ospathflag -eq 1 ]
+    then
+       #pull the specified openstack swift object
+       #turns on the pull selector switch for openstack
+       PullSelSwift=1
+       OSSwiftFilePull
+    else
+       #pull the entire container down
+       #turns on the pull selector switch for openstack
+       PullSelSwift=1
+       OSSwiftPull
+    fi
+else
+    #Missing openstack swift parameters 
+    log_string="Missing arguments to pull from openstack swift."
+    logger
+fi
+
 
 #Done swift
    #turn off the Pull Selector Flag
@@ -533,6 +721,8 @@ then
    logger
    #Change to the gitrepohome directory
    cd $gitrepohome
+   #Check that the landing path exists before we bother cloning.  It will fail if it doesn't
+   GitLandingHomeCheck
    #Clone the repo
    git clone $giturl 2>&1>>$log &
    #wait for it
@@ -548,7 +738,12 @@ then
    #Change to the proper branch we want to deploy
    GitBranchChange 
    #Move the code into the landinghome
-   CodeMove
+   landinghome=${gitlandinghome}
+   #Set dirpath for datamove
+   dirpath="$gitrepohome$gitrepo/"
+   log_string="Attempting to move data from $dirpath"
+   logger
+   DataMove
    #Cleanup
    cd $gitrepohome
    rm -rf $gitrepohome$gitrepo 2>&1>>$log
@@ -648,7 +843,7 @@ else
 fi
 #Try to configure Git after all validation has occurred
 GitConf
-#Check for presence of swift required variables
+#Check for presence of openstack swift required variables
 
    #Turn on ConfSelSwift switch based on results
 
@@ -659,7 +854,7 @@ logger
 
 #Pulling in options from shell.  Using getopts instead of getopt
 #Capturing options and suppressing getopts errors (leading : in getopts string) for our own error handling
-while getopts ":r:g:C:U:K:L:b:h:vdpcf-:" flag
+while getopts ":r:g:A:C:U:K:L:b:h:l:vdpcf-:" flag
   do
 #    echo "$flag" $OPTIND $OPTARG #for testing; will remove later
     #Error handling on missing arguments
@@ -689,63 +884,65 @@ while getopts ":r:g:C:U:K:L:b:h:vdpcf-:" flag
     fi
     #Handling getopts flags 
     case $flag in
-       -)#parsing long option names
-          case $OPTARG in
-             config) #Configures a git repo locally to be able to later only pull in changes.
-                  ConfSelectorFlag=1;OPTIND=$(( $OPTIND + 1 ))
-             ;;
-             pull) #Pulls data based on variables fed.
-                  PullSelectorFlag=1;OPTIND=$(( $OPTIND + 1 ))
-             ;;
-             clone) #Completes a temporary git clone moves the code into place and then deletes the directory created.
-                  gitclone=1;OPTIND=$(( $OPTIND + 1 ))
-             ;;
-             project) #same as a git remote shortname
-                  gitrepo="${!OPTIND}";gitrepoflag=1;OPTIND=$(( $OPTIND + 1 ))
-             ;;
-             shortname) #same as a git project name
-                  gitrepo="${!OPTIND}";gitrepoflag=1#;OPTIND=$(( $OPTIND + 1 ))
-             ;;
-             branch) #git branch name to deploy.
-                  gitrepobranch="${OPTIND}";gitrepobranchflag=1;OPTIND=$(( $OPTIND + 1 ))
-             ;;
-             url) #git URL to a repository.  may be ssh or https style
-                  giturl="${!OPTIND}";giturlflag=1;OPTIND=$(( $OPTIND + 1 ));script_debug
-             ;;
-             container)#openstack swift container
-                  OPTIND=$(( $OPTIND + 1 ))
-             ;;
-             osauthurl)#openstack authentication URL
-                  OPTIND=$(( $OPTIND + 1 ))
-             ;;
-             osuser)#openstack user
-                  OPTIND=$(( $OPTIND + 1 ))
-             ;;
-             oskey)#openstack api key
-                  OPTIND=$(( $OPTIND + 1 ))
-             ;;
-             ospath)#openstack path to directory or file -- requirement of a container variable as well
-                  OPTIND=$(( $OPTIND + 1 ))
-             ;;
-             debug)#spits debugging into log
-                  scriptdebugflag=1;OPTIND=$(( $OPTIND + 1 ))
-             ;;
-             verbose)#directs echo output to console
-                  log_verbose=1;OPTIND=$(( $OPTIND + 1 ))
-             ;;
-             *) #unknown command
-                  log_string="Unrecognized long flag or argument";logger;exit 5
-             ;;
-          esac
-          ;;
+# "--long-type" options I don't have stable yet
+#       -)#parsing long option names
+#          case $OPTARG in
+#             config) #Configures a git repo locally to be able to later only pull in changes.
+#                  ConfSelectorFlag=1;OPTIND=$(( $OPTIND + 1 ))
+#             ;;
+#             pull) #Pulls data based on variables fed.
+#                  PullSelectorFlag=1;OPTIND=$(( $OPTIND + 1 ))
+#             ;;
+#             clone) #Completes a temporary git clone moves the code into place and then deletes the directory created.
+#                  gitclone=1;OPTIND=$(( $OPTIND + 1 ))
+#             ;;
+#             project) #same as a git remote shortname
+#                  gitrepo="${!OPTIND}";gitrepoflag=1;OPTIND=$(( $OPTIND + 1 ))
+#             ;;
+#             shortname) #same as a git project name
+#                  gitrepo="${!OPTIND}";gitrepoflag=1#;OPTIND=$(( $OPTIND + 1 ))
+#             ;;
+#             branch) #git branch name to deploy.
+#                  gitrepobranch="${OPTIND}";gitrepobranchflag=1;OPTIND=$(( $OPTIND + 1 ))
+#             ;;
+#             url) #git URL to a repository.  may be ssh or https style
+#                  giturl="${!OPTIND}";giturlflag=1;OPTIND=$(( $OPTIND + 1 ));script_debug
+#             ;;
+#             container)#openstack swift container
+#                  OPTIND=$(( $OPTIND + 1 ))
+#             ;;
+#             osauthurl)#openstack authentication URL
+#                  OPTIND=$(( $OPTIND + 1 ))
+#             ;;
+#             osuser)#openstack user
+#                  OPTIND=$(( $OPTIND + 1 ))
+#             ;;
+#             oskey)#openstack api key
+#                  OPTIND=$(( $OPTIND + 1 ))
+#             ;;
+#             ospath)#openstack path to directory or file -- requirement of a container variable as well
+#                  OPTIND=$(( $OPTIND + 1 ))
+#             ;;
+#             debug)#spits debugging into log
+#                  scriptdebugflag=1;OPTIND=$(( $OPTIND + 1 ))
+#             ;;
+#             verbose)#directs echo output to console
+#                  log_verbose=1;OPTIND=$(( $OPTIND + 1 ))
+#             ;;
+#             *) #unknown command
+#                  log_string="Unrecognized long flag or argument";logger;exit 5
+#             ;;
+#          esac
+#          ;;
        r) gitrepo=$OPTARG;gitrepoflag=1;;
        g) giturl=$OPTARG;giturlflag=1;;
-       C) oscontainer=$OPTARG;;
-       U) osuser=$OPTARG;;
-       K) oskey=$OPTARG;;
-       A) osauthurl=$OPTARG;;
-       P) ospath=$OPTARG;;
-       L) landinghome=$OPTARG;;
+       C) oscontainer=$OPTARG;oscontainerflag=1;;
+       U) osuser=$OPTARG;osuserflag=1;;
+       K) oskey=$OPTARG;oskeyflag=1;;
+       A) osauthurl=$OPTARG;osauthurlflag=1;;
+       P) ospath=$OPTARG;ospathflag=1;;
+       L) oslandinghome=$OPTARG;;
+       l) gitlandinghome=$OPTARG;;
        b) gitrepobranch=$OPTARG;gitrepobranchflag=1;;
        h) host=$OPTARG;;
        d) scriptdebugflag=1;;
