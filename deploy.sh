@@ -4,30 +4,30 @@
 #variables
 log="/var/log/bitlancer-deploy.log" #log path
 host="" #used for deploying to a host or many hosts
-gitrepo=""
-giturl=""
-gitclone=0
+gitrepo="" #git repostitory specified by user at runtime
+giturl="" #git repository url specified by user at runtime
+gitcloneflag=0 #turned on with getopts option
 oscontainer="" #openstack/rackspace storage container
-osuser=""
-oskey=""
-osauthurl=""
-ospath=""
-osuserflag=0
-oskeyflag=0
-osauthurlflag=0
-ospathflag=0
-oscontainerflag=0
-oscontainerexist=0
-osauthpass=0
-gitrepobranch=""
-gitrepobranchflag=0
-gitversion=$(git --version)
-gitbinpath=$(which git)
-osswiftversion=$(swift --version)
-osswiftbinpath=$(which swift)
-gitcurrentbranch=""
-log_string=""
-log_verbose=0
+osuser="" #openstack swift username specified by user at runtime
+oskey="" #openstack swift api key specified by user at runtime
+osauthurl="" #openstack swift authentication url specified by user at runtime
+ospath="" #openstack swift path to file or directory within container specified by user at runtime
+osuserflag=0 #openstack swift user flag turned on by getopts option
+oskeyflag=0 #openstack swift api key flag turned on by getopts option
+osauthurlflag=0 #openstack swift authentication url flag turned on by getopts option
+ospathflag=0 #openstack swift path to file or directory within container flag turned on by getopts option
+oscontainerflag=0 #openstack container flag turned on by getopts option
+oscontainerexist=0 #openstack container exists switch turned on if exit code 0 from swift cli listing a specified container
+osauthpass=0 #openstack authentication switch. turned on after a successful authentication attempt by swift cli stat with return code 0.
+gitrepobranch="" #git repository branch to clone or pull from specified by user at runtime.
+gitrepobranchflag=0 #git repository branch flag turned on by getopts option
+gitversion=$(git --version) #git binary version
+gitbinpath=$(which git) #git binary path
+osswiftversion=$(swift --version) #openstack swift cli version
+osswiftbinpath=$(which swift) #openstack swift cli binary path
+gitcurrentbranch="" #git current working branch - used by GitBranchChange function
+log_string="" #For logging to log and for verbose logging. used for interaction with logger function
+log_verbose=0 #Switch used for verbose logging turned on by getopts option
 PullSelectorFlag=0 #used with getopts cases.  We check this later for 1 or 0
 ConfSelectorFlag=0 #used with getopts cases.  We check this later for 1 or 0
 gitrepoflag=0 #used with getopts cases. We check this later for 1 or 0 with PullSelector and ConfSelector fucntions.
@@ -54,7 +54,7 @@ operationfail=0
   date >> $log
 
 function logger {
-#Used for verbose logging to console as well as logging to files.
+  #Used for verbose logging to console as well as logging to files.
   if [ $log_verbose -eq 1 ]
   then
      #Echo out to the console as well as write to the log file.
@@ -70,12 +70,12 @@ function logger {
   fi
 }
 
-#Script Usage output function.  Use this to spit out a canned response on how to use this script.
 function script_usage {
-  echo "Script Usage:"
+  #Script Usage output function.  Use this to spit out a canned response on how to use this script.
+  echo "deploy.sh - Script Usage:"
   echo "deploy.sh <option> <argument>"
   echo "Global Script Options:"
-  echo "-e Debug Mode"
+  echo "-d Debug Mode"
   echo "-v Verbose: Provides status in console."
   echo
   echo "Git Usage:"
@@ -87,256 +87,275 @@ function script_usage {
   echo "  Updating code with git remote repository after configuration:"
   echo "  deploy.sh -p -r <arg> (-b <arg> optional)"
   echo "  See Git Related Options for further details."
-  echo "Git Related Options:"
+  echo "Git Related Option flag descriptions:"
   echo "-f Completes a full git clone (-g required (-b -l optional))"
-  echo "-c Configures git (-g -r required)"
+  echo "-c Configures git for local storage (used prior to pull option) (-g -r required)"
   echo "-p Pulls git repository (-r required)"
   echo "-r <Git Repository/Project Shortname>"
   echo "-g <Git HTTPS/SSH URL>"
   echo "-b <Git Repository Branch>"
-  echo "-h <host> or \"<host(s)>\" <--Multiple hosts must be within quotes and separated by spaces"
+  echo "-l <landing path> Defaults to /var/www/html/"
+  echo 
   echo
+  echo "Openstack Swift Usage:"
+  echo "  Example:"
+  echo "  deploy.sh -p -A <arg> -U <arg> -K <arg> -C <arg> [ -P <arg> -L <arg> ]"
+  echo "  Pulling a openstack swift container, and moving it to a landing path:"
+  echo "  deploy.sh -p -A <arg> -U <arg> -K <arg> -C <arg> -L <arg>"
+  echo "  Pulling a file or directory from within an openstack swift container"
+  echo "  deploy.sh -p -A <arg> -U <arg> -K <arg> -C <arg> -P <arg> [ -L <arg> ]"
+  echo "Openstack Swift Related Option flag descriptions:"
+  echo "-p Pulls the specified container and file or directory from openstack swift (required)"
+  echo "-A <Authentication URL> openstack Authentication URL (required)"
+  echo "-U <Username> openstack swift username (required)"
+  echo "-K <API Key> openstack swift API key (required)"
+  echo "-C <Container Name> openstack swift container name (required)"
+  echo "-P <path to file or directory within openstack swift container> openstack swift file or directory path"
+  echo "-L <Landing Path> openstack swift landing path. Defaults to /var/www/html/"
+  echo 
   echo
-  echo "Global Script Options:"
-  echo "-e Debug Mode"
-  echo "-v Verbose: Provides status in console."
-  echo "-L <landing path> Final destination of your repository code/files. Default is /var/www/html/.  This will override default."
-  }  
+  #error code for bad usage syntax or missing arguments
+  log_string="Exit due to bad script usage syntax or missing arguments."
+  logger
+  exit 5
+}
+
+
 
 function script_debug {
-#Debugging.  Use this to obtain some debugging information from the script. Activated by -d flag. 
-#spits all the varible values into the log and if verbose is selected it will spit to the console.
-#add this before exits in functions or anywhere that you want to obtain more information on script processing.
-if [ $scriptdebugflag -eq 1 ]
-then
-   log_string="log=$log"
-   logger
-   log_string="host=$host"
-   logger
-   log_string="gitrepo=$gitrepo"
-   logger
-   log_string="giturl=$giturl"
-   logger
-   log_string="gitclone=$gitclone"
-   logger
-   log_string="oscontainer=$oscontainer"
-   logger
-   log_string="osuser=$osuser"
-   logger
-   log_string="oskey=$oskey"
-   logger
-   log_string="osauthurl=$osauthurl"
-   logger
-   log_string="ospath=$ospath"
-   logger
-   log_string="osuserflag=$osuserflag"
-   logger
-   log_string="oskeyflag=$oskeyflag"
-   logger
-   log_string="osauthurlflag=$osauthurlflag"
-   logger
-   log_string="ospathflag=$ospathflag"
-   logger
-   log_string="oscontainerflag=$oscontainerflag"
-   logger
-   log_string="gitrepobranch=$gitrepobranch"
-   logger
-   log_string="gitrepobranchflag=$gitrepobranchflag"
-   logger
-   log_string="gitversion=$gitversion"
-   logger
-   log_string="gitbinpath=$gitbinpath"
-   logger
-   log_string="gitcurrentbranch=$gitcurrentbranch"
-   logger
-   log_string="log_verbose=$log_verbose"
-   logger
-   log_string="PullSelectorFlag=$PullSelectorFlag"
-   logger
-   log_string="ConfSelectorFlag=$ConfSelectorFlag"
-   logger
-   log_string="gitrepoflag=$gitrepoflag"
-   logger
-   log_string="gitbranchflag=$gitbranchflag"
-   logger
-   log_string="giturlflag=$giturlflag"
-   logger
-   log_string="ConfSelGit=$ConfSelGit"
-   logger
-   log_string="ConfSelSwift=$ConfSelSwift"
-   logger
-   log_string="PullSelGit=$PullSelGit"
-   logger
-   log_string="PullSelSwift=$PullSelSwift"
-   logger
-   log_string="gitremoteexist=$gitremoteexist"
-   logger
-   log_string="dirpath=$dirpath"
-   logger
-   log_string="dirsuccess=$dirsuccess"
-   logger
-   log_string="gitrepohome=$gitrepohome"
-   logger
-   log_string="datahome=$datahome"
-   logger
-   log_string="landinghome=$landinghome"
-   logger
-   log_string="scriptdebugflag=$scriptdebugflag"
-   logger
-   log_string="operationsuccess=$operationsuccess"
-   logger
-   log_string="operationfail=$operationfail"
-   logger
-fi
+  #Debugging.  Use this to obtain some debugging information from the script. Activated by -d flag. 
+  #spits all the varible values into the log and if verbose is selected it will spit to the console.
+  #add this before exits in functions or anywhere that you want to obtain more information on script processing.
+  if [ $scriptdebugflag -eq 1 ]
+  then
+      log_string="log=$log"
+      logger
+      log_string="host=$host"
+      logger
+      log_string="gitrepo=$gitrepo"
+      logger
+      log_string="giturl=$giturl"
+      logger
+      log_string="gitcloneflag=$gitcloneflag"
+      logger
+      log_string="oscontainer=$oscontainer"
+      logger
+      log_string="osuser=$osuser"
+      logger
+      log_string="oskey=$oskey"
+      logger
+      log_string="osauthurl=$osauthurl"
+      logger
+      log_string="ospath=$ospath"
+      logger
+      log_string="osuserflag=$osuserflag"
+      logger
+      log_string="oskeyflag=$oskeyflag"
+      logger
+      log_string="osauthurlflag=$osauthurlflag"
+      logger
+      log_string="ospathflag=$ospathflag"
+      logger
+      log_string="oscontainerflag=$oscontainerflag"
+      logger
+      log_string="gitrepobranch=$gitrepobranch"
+      logger
+      log_string="gitrepobranchflag=$gitrepobranchflag"
+      logger
+      log_string="gitversion=$gitversion"
+      logger
+      log_string="gitbinpath=$gitbinpath"
+      logger
+      log_string="gitcurrentbranch=$gitcurrentbranch"
+      logger
+      log_string="log_verbose=$log_verbose"
+      logger
+      log_string="PullSelectorFlag=$PullSelectorFlag"
+      logger
+      log_string="ConfSelectorFlag=$ConfSelectorFlag"
+      logger
+      log_string="gitrepoflag=$gitrepoflag"
+      logger
+      log_string="gitbranchflag=$gitbranchflag"
+      logger
+      log_string="giturlflag=$giturlflag"
+      logger
+      log_string="ConfSelGit=$ConfSelGit"
+      logger
+      log_string="ConfSelSwift=$ConfSelSwift"
+      logger
+      log_string="PullSelGit=$PullSelGit"
+      logger
+      log_string="PullSelSwift=$PullSelSwift"
+      logger
+      log_string="gitremoteexist=$gitremoteexist"
+      logger
+      log_string="dirpath=$dirpath"
+      logger
+      log_string="dirsuccess=$dirsuccess"
+      logger
+      log_string="gitrepohome=$gitrepohome"
+      logger
+      log_string="datahome=$datahome"
+      logger
+      log_string="landinghome=$landinghome"
+      logger
+      log_string="scriptdebugflag=$scriptdebugflag"
+      logger
+      log_string="operationsuccess=$operationsuccess"
+      logger
+      log_string="operationfail=$operationfail"
+      logger
+  fi
 }
 
 function GitExistCheck {
-#Checks that git is installed and at a good version (if we want to go that far.)
+  #Checks that git is installed and at a good version (if we want to go that far.)
   if [[ $gitversion != *git* ]]
   then
      #We could do an install of git here if desired
-     log_string="Error: Git not installed"
+     log_string="Error: Git is not installed"
      logger
      exit 1
   fi
 }
 
 function GitRepoHomeCheck {
-#checks to see if the gitrepohome exists
-if [ -d $gitrepohome ]
-then
-   log_string="Repository home: $gitrepohome exists."
-   logger
-else
-   log_string="Repository home: $gitrepohome does not exist."
-   logger
-   #create the directory
-   dirpath=${gitrepohome}
-   CreateDir   
-fi
+  #checks to see if the gitrepohome exists
+  if [ -d $gitrepohome ]
+  then
+      log_string="Repository home: $gitrepohome exists."
+      logger
+  else
+      log_string="Repository home: $gitrepohome does not exist."
+      logger
+      #create the directory
+      dirpath=${gitrepohome}
+      CreateDir   
+  fi
 }
 
 function GitBranchCheck {
-#Checks what the current branch is set to by setting variable gitcurrentbranch to the value.
-gitcurrentbranch=$(git rev-parse --abbrev-ref HEAD)
- log_string="Current git working branch is: $gitcurrentbranch."
- logger
+  #Checks what the current branch is set to by setting variable gitcurrentbranch to the value.
+  gitcurrentbranch=$(git rev-parse --abbrev-ref HEAD)
+  log_string="Current git working branch is: $gitcurrentbranch."
+  logger
 }
 
 function GitBranchChange {
-#Changes Branches based on user's input and current selected branch.
-log_string="Attempting to change git working branch."
-logger
-if [ -z $gitrepobranch ]
-then 
-   log_string="Git working branch not specified, assuming master."
-   logger
-   gitrepobranch="master"
-fi
-if [[ $gitrepobranch != $gitcurrentbranch ]]
-then
-   log_string="The current branch $gitcurrentbranch is not set to the desired working branch $gitrepobranch."
-   logger
-   log_string="Changing branch from $gitcurrentbranch to $gitrepobranch."
-   logger
-   git checkout $gitrepobranch 2>&1>>$log
-   if [ $? -eq 0 ]
+  #Changes Branches based on user's input and current selected branch.
+  log_string="Attempting to change git working branch."
+  logger
+  if [ -z $gitrepobranch ]
+  then 
+      log_string="Git working branch not specified, assuming master."
+      logger
+      gitrepobranch="master"
+  fi
+  if [[ $gitrepobranch != $gitcurrentbranch ]]
+  then
+      log_string="The current branch $gitcurrentbranch is not set to the desired working branch $gitrepobranch."
+      logger
+      log_string="Changing branch from $gitcurrentbranch to $gitrepobranch."
+      logger
+      git checkout $gitrepobranch 2>&1>>$log
+      if [ $? -eq 0 ]
       then
-         GitBranchCheck
+          GitBranchCheck
       else
-         log_string="Branch change failed."
-         logger
-         exit 1
-   fi
-else
-   log_string="No need to change branches, master already active."
-   logger
-fi
+          log_string="Branch change failed."
+          logger
+          exit 1
+      fi
+  else
+      log_string="No need to change branches, master already active."
+      logger
+  fi
 }
 
 function CreateDir {
-#creates a new directory and verifies.
-   log_string="Creating missing directory."
-   logger
-   mkdir -p $dirpath 2>&1>>$log
-   if [ $? -eq 0 ]
-   then
+  #creates a new directory and verifies.
+  log_string="Creating missing directory."
+  logger
+  mkdir -p $dirpath 2>&1>>$log
+  if [ $? -eq 0 ]
+  then
       log_string="Directory created."
       logger
       dirsuccess=1
-   else
+  else
       log_string="Directory failed to be created.  Check directory permissions."
       logger
       dirsuccess=0
-   fi
+  fi
 }
 
 function GitRemoteCheck {
-#Checks for the existance of a repository based on the gitrepo passed from the user.
-log_string="Checking for specified repository."
-logger
-#Check for presence of the repository directory
-if [ -d "$gitrepohome$gitrepo" ]
-then
-   log_string="A directory exists with the name $gitrepohome$gitrepo."
-   logger
-   #turn on gitremoteexist variable based on results.
-   gitremoteexist=2
-else
-   gitremoteexist=0
-fi
-#Check for git remote, verify 2 otherwise we have no way to check for existance of the remote from the git conf
-if [ $gitremoteexist -eq 2 ]
-then
-   log_string="Checking for existing git remote."
-   logger
-   cd $gitrepohome$gitrepo
-   git remote | grep $gitrepo 2>&1>>$log
-   if [ $? -eq 0 ]
-   then 
-      log_string="git remote shortname exists."
+  #Checks for the existance of a repository based on the gitrepo passed from the user.
+  log_string="Checking for specified repository."
+  logger
+  #Check for presence of the repository directory
+  if [ -d "$gitrepohome$gitrepo" ]
+  then
+      log_string="A directory exists with the name $gitrepohome$gitrepo."
       logger
-      #turn on gitremoteexist variable based on results
-      gitremoteexist=$((gitremoteexist + 1))
-   else
-      log_string="git remote shortname not detected."
-   fi
-else
-   log_string="No directory exists with the specified git shortname, and therefore unable to read project's git configurtion to search for specified remote."
-   logger
-fi
+      #turn on gitremoteexist variable based on results.
+      gitremoteexist=2
+  else
+      gitremoteexist=0
+  fi
+  #Check for git remote, verify 2 otherwise we have no way to check for existance of the remote from the git conf
+  if [ $gitremoteexist -eq 2 ]
+  then
+      log_string="Checking for existing git remote."
+      logger
+      cd $gitrepohome$gitrepo
+      git remote | grep $gitrepo 2>&1>>$log
+      if [ $? -eq 0 ]
+      then 
+          log_string="git remote shortname exists."
+          logger
+          #turn on gitremoteexist variable based on results
+          gitremoteexist=$((gitremoteexist + 1))
+      else
+          log_string="git remote shortname not detected."
+      fi
+  else
+      log_string="No directory exists with the specified git shortname, and therefore unable to read project's git configurtion to search for specified remote."
+      logger
+  fi
 }
 
 function GitLandingHomeCheck {
-#checks for valid landinghome
-log_string="Checking for landing path $gitlandinghome"
-logger
-if [ -d $gitlandinghome ]
-then
-   log_string="landing path exists."
-   logger
-else
-   #we could choose to just create the path instead
-   log_string="landing path does not exist."
-   logger
-   exit 1
-fi
+  #checks for valid landinghome
+  log_string="Checking for landing path $gitlandinghome"
+  logger
+  if [ -d $gitlandinghome ]
+  then
+      log_string="landing path exists."
+      logger
+  else
+      #we could choose to just create the path instead
+      log_string="landing path does not exist."
+      logger
+      exit 1
+  fi
 }
 
 function OSSwiftLandingHomeCheck {
-#checks for valid landinghome
-log_string="Checking for landing path $oslandinghome"
-logger
-if [ -d $oslandinghome ]
-then
-   log_string="openstack swift landing path exists."
-   logger
-else
-   #we could choose to just create the path instead
-   log_string="landing path does not exist."
-   logger
-   exit 1
-fi
+  #checks for valid landinghome
+  log_string="Checking for landing path $oslandinghome"
+  logger
+  if [ -d $oslandinghome ]
+  then
+      log_string="openstack swift landing path exists."
+      logger
+  else
+      #we could choose to just create the path instead
+      log_string="landing path does not exist."
+      logger
+      exit 1
+  fi
 }
 
 function OSSwiftDataHomeCheck {
@@ -355,139 +374,139 @@ function OSSwiftDataHomeCheck {
 }
 
 function DataMove {
-#Takes pulled code/data moves into proper web directory
-#Set your gitlandinghome or oslandinghome to landinghome and then use this.
-log_string="Attempting to move data into place."
-logger
-#Check that the landinghome exists
-#LandingHomeCheck
-#move code from repodir to live landing dir
-rsync -av --progress $dirpath* $landinghome --exclude .git 2>&1>>$log
-#clear dirpath just in case 
-dirpath=""
-#Check if it went well
-if [ $? -eq 0 ]
-then
-   log_string="Moved code into place."
-   logger
-   operationsuccess=$((operationsuccess + 1))
-else
-   log_string="Failed to move code into place."
-   logger
-   operationfail=$((operationfail + 1))
-fi
+  #Takes pulled code/data moves into proper web directory
+  #Set your gitlandinghome or oslandinghome to landinghome and then use this.
+  log_string="Attempting to move data into place."
+  logger
+  #move code from repodir to live landing dir
+  rsync -av --progress $dirpath* $landinghome --exclude .git 2>&1>>$log
+  #clear dirpath just in case 
+  dirpath=""
+  #Check if it went well
+  if [ $? -eq 0 ]
+  then
+     log_string="Moved code into place."
+     logger
+     operationsuccess=$((operationsuccess + 1))
+  else
+     log_string="Failed to move code into place."
+     logger
+     operationfail=$((operationfail + 1))
+  fi
 }
 
 
 
 function GitConf {
-if [ $ConfSelGit -eq 1 ]
-then
-  log_string="Configuring Git..."
-  logger
-  #Change to the gitrepohome directory
-  cd $gitrepohome
-  pwd 2>&1>>$log
-  #Clone the repo
-  log_string="Configuring Git..."
-  logger
-  #Change to the gitrepohome directory
-  cd $gitrepohome
-  #Clone the repo
-  git clone $giturl 2>&1>>$log &
-  #wait for it
-  wait $!
-  #Validate successful clone
-  if [ $? -eq 0 ]
+  if [ $ConfSelGit -eq 1 ]
   then
-      #Set permissions on the new directory
-      chmod 755 $gitrepohome$gitrepo 2>&1>>$log
-      #Change to the new directory
-      cd $gitrepohome$gitrepo
-      #Change the repo name from origin to match the project name - will keep systems with many repos from getting confusing
-      log_string="Changing origin to match the project name"
+      log_string="Configuring Git..."
       logger
-      git remote rename origin $gitrepo 2>&1>>$log
-      #Re-check that the repo was created; for verification that work was completed properly
+      #Change to the gitrepohome directory
+      cd $gitrepohome
+      log_string="In Directory:"
+      logger
+      pwd 2>&1>>$log
+      #Clone the repo
+      log_string="Configuring Git..."
+      logger
+      #Change to the gitrepohome directory
+      cd $gitrepohome
+      #Clone the repo
+      git clone $giturl 2>&1>>$log &
+      #wait for it
+      wait $!
+      #Validate successful clone
+      if [ $? -eq 0 ]
+      then
+          #Set permissions on the new directory
+          chmod 755 $gitrepohome$gitrepo 2>&1>>$log
+          #Change to the new directory
+          cd $gitrepohome$gitrepo
+          #Change the repo name from origin to match the project name - will keep systems with many repos from getting confusing
+          log_string="Changing origin to match the project name"
+          logger
+          git remote rename origin $gitrepo 2>&1>>$log
+          #Re-check that the repo was created; for verification that work was completed properly
+      else
+          log_string="git clone returned non zero exit code."
+          logger
+      fi
+      GitRemoteCheck
+      #Check for a 3 which means the directory and remote both exist matching the specified reponame
+      if [ $gitremoteexist -eq 3 ]
+      then
+          log_string="Configured new git repository $gitrepo successfully."
+          logger
+          #increment operationsuccess if successful
+          operationsuccess=$((operationsuccess + 1))
+          #Shut off the configuration selector for git so we don't try and re-configure
+          ConfSelGit=0
+      else
+          log_string="Failed to configure git repository $gitrepo."
+          logger
+          operationfail=$((operationfail +1))
+      fi
   else
-      log_string="git clone returned non zero exit code."
+      log_string="Git configuration was not qualified.  Check log $log for more details."
       logger
   fi
-  GitRemoteCheck
-  #Check for a 3 which means the directory and remote both exist matching the specified reponame
-  if [ $gitremoteexist -eq 3 ]
-  then
-      log_string="Configured new git repository $gitrepo successfully."
-      logger
-      #increment operationsuccess if successful
-      operationsuccess=$((operationsuccess + 1))
-      #Shut off the configuration selector for git so we don't try and re-configure
-      ConfSelGit=0
-  else
-      log_string="Failed to configure git repository $gitrepo."
-      logger
-      operationfail=$((operationfail +1))
-  fi
-else
-   log_string="Git configuration was not qualified.  Check $log for more details."
-   logger
-fi
 }
 
 
 function GitPull {
-#Pulls Git repo from remote to local repo. Checks that the repo and branch exist locally.
-if [ $PullSelGit -eq 1 ]
-then
-   #change to the proper repo dir
-   cd $gitrepohome$gitrepo
-   #change to user specified branch; master assumed on null
-   GitBranchChange
-   #Check the landing path exists before we bother pulling it will fail if it doesn't
-   GitLandingHomeCheck
-   #Pull in the code
-   git pull $gitrepo $gitrepobranch 2>&1>>$log &
-   #wait for it
-   wait $!
-   #Validate pull
-   if [ $? -eq 0 ]
-   then
-      log_string="Pulled code from remote."
+  #Pulls Git repo from remote to local repo. Checks that the repo and branch exist locally.
+  if [ $PullSelGit -eq 1 ]
+  then
+      #change to the proper repo dir
+      cd $gitrepohome$gitrepo
+      #change to user specified branch; master assumed on null
+      GitBranchChange
+      #Check the landing path exists before we bother pulling it will fail if it doesn't
+      GitLandingHomeCheck
+      #Pull in the code
+      git pull $gitrepo $gitrepobranch 2>&1>>$log &
+      #wait for it
+      wait $!
+      #Validate pull
+      if [ $? -eq 0 ]
+      then
+          log_string="Pulled code from remote."
+          logger
+      else
+          log_string="Error on code pull from remote."
+          logger
+          exit 1
+      fi
+      #make sure the branch is exactly the same as remote
+      git reset --hard $gitrepo/$gitrepobranch 2>&1>>$log
+      #Validate reset
+      if [ $? -eq 0 ]
+      then
+          log_string="Hard reset on local git repository successful."
+          logger
+      else
+          log_string="Hard reset on local git repository unsuccessful."
+          logger
+          exit 1
+      fi
+      #Move the code into place
+      landinghome=${gitlandinghome}
+      log_string="Set landing to $landinghome"
       logger
-   else
-      log_string="Error on code pull from remote."
+      #set dirpath for datamove
+      dirpath="$gitrepohome$gitrepo/" # slash needed here
+      log_string="Trying to move data from $dirpath"
       logger
-      exit 1
-   fi
-   #make sure the branch is exactly the same as remote
-   git reset --hard $gitrepo/$gitrepobranch 2>&1>>$log
-   #Validate reset
-   if [ $? -eq 0 ]
-   then
-      log_string="Hard reset on local git repository successful."
+      #set dirpath for datamove
+      dirpath="$gitrepohome$gitrepo/"
+      log_string="Attempting to move data from $dirpath"
       logger
-   else
-      log_string="Hard reset on local git repository unsuccessful."
+      DataMove
+  else
+      log_string="Git pull was not qualified. Check $log for more details."
       logger
-      exit 1
-   fi
-   #Move the code into place
-   landinghome=${gitlandinghome}
-   log_string="Set landing to $landinghome"
-   logger
-   #set dirpath for datamove
-   dirpath="$gitrepohome$gitrepo/" # slash needed here
-   log_string="Trying to move data from $dirpath"
-   logger
-   #set dirpath for datamove
-   dirpath="$gitrepohome$gitrepo/"
-   log_string="Attempting to move data from $dirpath"
-   logger
-   DataMove
-else
-   log_string="Git pull was not qualified. Check $log for more details."
-   logger
-fi
+  fi
 }
 
 
@@ -604,259 +623,269 @@ function OSSwiftPull {
 }
 
 function GitRepoValidate {
-#Makes sure the user didn't specify a gitrepo variable that has a "/" in it
-echo $gitrepo | grep / > /dev/null
-if [ $? -eq 0 ]
-then 
-   log_string="Bad git repository shortname/project due to "/" in name."
-   logger
-   gitrepoflag=0
-else
-   log_string="git repository shortname/project looks OK."
-   logger
-fi
+  #Makes sure the user didn't specify a gitrepo variable that has a "/" in it
+  echo $gitrepo | grep / > /dev/null
+  if [ $? -eq 0 ]
+  then 
+      log_string="Bad git repository shortname/project due to "/" in name."
+      logger
+      gitrepoflag=0
+  else
+      log_string="git repository shortname/project looks OK."
+      logger
+  fi
 }
 
 function PullSelector {
-#Figures out what we need to pull based on variables passed
-log_string="Pull flag was specified."
-logger
-log_string="Determining what to pull..."
-logger
-#Start checking for git pull
-log_string="Checking for git pull parameters first."
-logger
-log_string="Checking for an existing repository home: $gitrepohome"
-logger
-GitRepoHomeCheck
-log_string="Validating specified git repository shortname/project."
-logger
-GitRepoValidate
-#Check for presence of git required variables
-if [[ $PullSelectorFlag -eq 1 && $gitrepoflag -eq 1 ]]
-then
-   #Pre-qualifying the pull of gitrepo after variable verification
-   #Check if git is installed
-   GitExistCheck
-   #Check if the repo is configured
-   GitRemoteCheck
-   #Gather Results from GitRemoteCheck
-   if [ $gitremoteexist -eq 3 ]
-   then
-      #We have a valid directory and remote configured so we want to perform the pull
-      PullSelGit=1
-   else
-      case $gitremoteexist in
-        0) #Neither the directory or the remote are there
-           log_string="No directory or remote present on the system.  Please use the configure flag first."
-           logger
-           PullSelGit=0
-        ;;
-        1) #Won't happen
-           log_string="Pull Selector case 1 error..."
-           logger
-           PullSelGit=0
-        ;;
-        2) #directory exists but no remote configured
-           log_string="The directory is present, but the remote shortname/project is not configured.  Re-run this script with the configure flag."
-           logger
-           PullSelGit=0
-        ;;
-      esac
-   fi
-   #Try and do a git pull now that we've validated everything. It will fail if variables are not set properly after this validation
-   GitPull
-else
-   log_string="Missing arguments to pull git a git repository."
-   logger
-fi
-#Done with git
-#Start checking for openstack swift
-#Check for all required swift options first
-if [[ $PullSelectorFlag -eq 1 && $osauthurlflag -eq 1 && $osuserflag -eq 1 && $oskeyflag -eq 1 && $oscontainerflag -eq 1 ]]
-then
-    #Did the user specify an openstack path
-    if [ $ospathflag -eq 1 ]
-    then
-       #pull the specified openstack swift object
-       #turns on the pull selector switch for openstack
-       PullSelSwift=1
-       OSSwiftFilePull
-    else
-       #pull the entire container down
-       #turns on the pull selector switch for openstack
-       PullSelSwift=1
-       OSSwiftPull
-    fi
-else
-    #Missing openstack swift parameters 
-    log_string="Missing arguments to pull from openstack swift."
-    logger
-fi
-
-
-#Done swift
-   #turn off the Pull Selector Flag
-   PullSelectorFlag=0
-   log_string="Nothing more to pull."
-   logger
+  #Figures out what we need to pull based on variables passed
+  log_string="Pull flag was specified."
+  logger
+  log_string="Determining what to pull..."
+  logger
+  #Start checking for git pull
+  log_string="Checking for git pull parameters."
+  logger
+  #Check for presence of git required variables
+  if [[ $PullSelectorFlag -eq 1 && $gitrepoflag -eq 1 ]]
+  then
+      log_string="Checking for an existing repository home: $gitrepohome"
+      logger
+      GitRepoHomeCheck
+      log_string="Validating specified git repository shortname/project."
+      logger
+      GitRepoValidate
+      #Pre-qualifying the pull of gitrepo after variable verification
+      #Check if git is installed
+      GitExistCheck
+      #Check if the repo is configured
+      GitRemoteCheck
+      #Gather Results from GitRemoteCheck
+      if [ $gitremoteexist -eq 3 ]
+      then
+          #We have a valid directory and remote configured so we want to perform the pull
+          PullSelGit=1
+      else
+          case $gitremoteexist in
+             0) #Neither the directory or the remote are there
+                log_string="No directory or remote present on the system.  Please use the configure flag first."
+                logger
+                PullSelGit=0
+             ;;
+             1) #Won't happen
+                log_string="Pull Selector case 1 error..."
+                logger
+                PullSelGit=0
+             ;;
+             2) #directory exists but no remote configured
+                log_string="The directory is present, but the remote shortname/project is not configured.  Re-run this script with the configure flag."
+                logger
+                PullSelGit=0
+             ;;
+          esac
+      fi
+     #Try and do a git pull now that we've validated everything. It will fail if variables are not set properly after this validation
+     GitPull
+  else
+     log_string="Missing arguments to pull git a git repository."
+     logger
+     script_usage
+  fi
+  #Done with git
+  #Start checking for openstack swift
+  #Check for all required swift options 
+  log_string="Checking for openstack swift parameters."
+  logger
+  if [[ $PullSelectorFlag -eq 1 && $osauthurlflag -eq 1 && $osuserflag -eq 1 && $oskeyflag -eq 1 && $oscontainerflag -eq 1 ]]
+  then
+      #Did the user specify an openstack path
+      if [ $ospathflag -eq 1 ]
+      then
+          #pull the specified openstack swift object
+          #turns on the pull selector switch for openstack
+          PullSelSwift=1
+          OSSwiftFilePull
+      else
+          #pull the entire container down
+          #turns on the pull selector switch for openstack
+          PullSelSwift=1
+          OSSwiftPull
+      fi
+  else
+      #Missing openstack swift parameters 
+      log_string="Missing arguments to pull from openstack swift."
+      logger
+      script_usage
+  fi
+  #Done swift
+  #turn off the Pull Selector Flag
+  PullSelectorFlag=0
+  log_string="Nothing more to pull."
+  logger
 }
 
 function GitClone {
-#Clones a git repo, moves the data into place, and then cleans up.
-log_string="git clone flag was specified."
-logger
-GitRepoHomeCheck
-GitExistCheck
-#Check for required variables.
-if [[ $gitclone -eq 1 && $giturlflag -eq 1 ]]
-then
-   log_string="Git will be cloned with the following parameters:"
-   logger
-   log_string="Repository URL: $giturl"
-   logger
-   log_string="Repository Branch: $gitrepobranch"
-   logger
-   log_string="Cloning Git..."
-   logger
-   #Change to the gitrepohome directory
-   cd $gitrepohome
-   #Check that the landing path exists before we bother cloning.  It will fail if it doesn't
-   GitLandingHomeCheck
-   #Clone the repo
-   git clone $giturl 2>&1>>$log &
-   #wait for it
-   wait $!
-   #Figure out what the repo directory is by separating the project name from the URL - **was a pain
-   gitrepo=$(basename ${giturl%.*})
-   #Set permissions on the new directory
-   chmod 755 $gitrepohome$gitrepo 2>&1>>$log
-   #Change to the new directory
-   cd $gitrepohome$gitrepo
-   #Check what branch we're in
-   GitBranchCheck
-   #Change to the proper branch we want to deploy
-   GitBranchChange 
-   #Move the code into the landinghome
-   landinghome=${gitlandinghome}
-   #Set dirpath for datamove
-   dirpath="$gitrepohome$gitrepo/"
-   log_string="Attempting to move data from $dirpath"
-   logger
-   DataMove
-   #Cleanup
-   cd $gitrepohome
-   rm -rf $gitrepohome$gitrepo 2>&1>>$log
-   if [ $? -eq 0 ]
-   then
-       log_string="Removed temporary repository data."
-       logger
-   else
-       log_string="Unable to remove repository data."
-       logger
-       exit 1
-   fi
-   log_string="git clone process completed successfully."
-   logger
-   exit 0
-else
-   log_string="Missing parameter for Git URL."
-   logger
-   exit 5
-fi
+  #Clones a git repo, moves the data into place, and then cleans up.
+  log_string="git clone flag was specified."
+  logger
+  GitRepoHomeCheck
+  GitExistCheck
+  #Check for required variables.
+  if [[ $gitcloneflag -eq 1 && $giturlflag -eq 1 ]]
+  then
+      log_string="Git will be cloned with the following parameters:"
+      logger
+      log_string="Repository URL: $giturl"
+      logger
+      log_string="Repository Branch: $gitrepobranch"
+      logger
+      log_string="Cloning Git..."
+      logger
+      #Change to the gitrepohome directory
+      cd $gitrepohome
+      #Check that the landing path exists before we bother cloning.  It will fail if it doesn't
+      GitLandingHomeCheck
+      #Clone the repo
+      git clone $giturl 2>&1>>$log &
+      #wait for it
+      wait $!
+      #Figure out what the repo directory is by separating the project name from the URL - **was a pain
+      gitrepo=$(basename ${giturl%.*})
+      #Set permissions on the new directory
+      chmod 755 $gitrepohome$gitrepo 2>&1>>$log
+      #Change to the new directory
+      cd $gitrepohome$gitrepo
+      #Check what branch we're in
+      GitBranchCheck
+      #Change to the proper branch we want to deploy
+      GitBranchChange 
+      #Move the code into the landinghome
+      landinghome=${gitlandinghome}
+      #Set dirpath for datamove
+      dirpath="$gitrepohome$gitrepo/"
+      log_string="Attempting to move data from $dirpath"
+      logger
+      DataMove
+      #Cleanup
+      cd $gitrepohome
+      rm -rf $gitrepohome$gitrepo 2>&1>>$log
+      if [ $? -eq 0 ]
+      then
+          log_string="Removed temporary repository data."
+          logger
+      else
+          log_string="Unable to remove repository data."
+          logger
+          exit 1
+      fi
+      log_string="git clone process completed successfully."
+      logger
+  else
+      log_string="Missing parameter for Git URL."
+      logger
+      exit 5
+  fi
 }
 
 function ConfSelector {
-#Figures out what we need to configure based on variables passed
-log_string="Configuration flag was specified."
-logger
-log_string="Determining what to configure..."
-logger
-log_string="Trying git configuration."
-logger
-#Check if the gitrepohome exists
-log_string="Checking for an existing gitrepohome path: $gitrepohome"
-logger
-GitRepoHomeCheck
-#Check if the gitrepo variable has a slash in it
-log_string="Validating specified git repository shortname/project."
-logger
-GitRepoValidate
-#Check for presence of git required variables
-if [[ $ConfSelectorFlag -eq 1 && $giturlflag -eq 1 && $gitrepoflag -eq 1 ]]
-then
- #Pre-qualifying the configuration of git repos after variable verification
-  #Check if Git is installed
-  GitExistCheck
-  #Check if the repo already exists
-  GitRemoteCheck
-  #Gather results from GitRemoteCheck and process
-  case $gitremoteexist in
-   0) #git remote and gitrepo directory don't exist, good condition
-       log_string="Git will be configured with the following parameters:"
-       logger
-       log_string="Repositry Local Path: $gitrepohome$gitrepo"
-       logger
-       log_string="Repository URL: $giturl"
-       logger
-       log_string="Repository Shortname: $gitrepo"
-       logger
-       #Switch on the ConfSelGit variable to enable the configuration of the repo
-       ConfSelGit=1
-       #Configure the repo
-     ;;
-   1) #git remote exists but not the directory
-      log_string="git remote detected, but no repository directory matching the specified repository shortname $gitrepo."
+  #Figures out what we need to configure based on variables passed
+  log_string="Configuration flag was specified."
+  logger
+  log_string="Determining what to configure..."
+  logger
+  log_string="Trying git configuration."
+  logger
+  #Check for presence of required git configuration switches
+  if [[ $ConfSelectorFlag -eq 1 && $giturlflag -eq 1 && $gitrepoflag -eq 1 ]]
+  then
+      #Check if the gitrepohome exists
+      log_string="Checking for an existing gitrepohome path: $gitrepohome"
       logger
-      log_string="This case would only occur if this deploy script is running in an existing git repo. No other work to do."
+      GitRepoHomeCheck
+      #Check if the gitrepo variable has a slash in it
+      log_string="Validating specified git repository shortname/project."
       logger
-      ConfSelGit=0
-     ;;
-   2) #git directory exists that matches specified gitrepo
-      log_string="The repository specified has an existing directory, but there is no matching remote."
+      GitRepoValidate
+      #Check for presence of git required variables
+      #Pre-qualifying the configuration of git repos after variable verification
+      #Check if Git is installed
+      GitExistCheck
+      #Check if the repo already exists
+      GitRemoteCheck
+      #Gather results from GitRemoteCheck and process
+      case $gitremoteexist in
+          0) #git remote and gitrepo directory don't exist, good condition
+            log_string="Git will be configured with the following parameters:"
+            logger
+            log_string="Repositry Local Path: $gitrepohome$gitrepo"
+            logger
+            log_string="Repository URL: $giturl"
+            logger
+            log_string="Repository Shortname: $gitrepo"
+            logger
+            #Switch on the ConfSelGit variable to enable the configuration of the repo
+            ConfSelGit=1
+            #Configure the repo
+          ;;
+          1) #git remote exists but not the directory
+             log_string="git remote detected, but no repository directory matching the specified repository shortname $gitrepo."
+             logger
+             log_string="This case would only occur if this deploy script is running in an existing git repo. No other work to do."
+             logger
+             ConfSelGit=0
+          ;;
+          2) #git directory exists that matches specified gitrepo
+            log_string="The repository specified has an existing directory, but there is no matching remote."
+            logger
+            #check if the directory is empty
+            log_string="Checking if the directory found is empty."
+            logger
+            if [ ! -e $gitrepo/* ]
+            then
+                log_string="Directory is empty. Removing."
+                logger
+                #so we return proper error codes with CreateDir function
+                rmdir $gitrepohome$gitrepo 2>&1>>$log
+                ConfSelGit=1
+            else
+                log_string="The repository specified matches an existing directory $gitrepohome$gitrepo.  It is not empty and we will not configure your repository here."
+                logger
+                ConfSelGit=0
+            fi
+          ;;
+          3) #both git remote and git directory exist.  Don't configure.
+            log_string="The specified repository $gitrepo already exists on this system. Skipping configuration."
+            logger
+            ConfSelGit=0
+          ;;
+      esac
+  else
+      log_string="Missing arguments to configure a git repository."
       logger
-      #check if the directory is empty
-      log_string="Checking if the directory found is empty."
-      logger
-      if [ ! -e $gitrepo/* ]
-      then
-         log_string="Directory is empty. Removing."
-         logger
-         #code efficiency to reuse createdir function - remove the directory
-         rmdir $gitrepohome$gitrepo 2>&1>>$log
-         ConfSelGit=1
-      else
-         log_string="The repository specified matches an existing directory $gitrepohome$gitrepo.  It is not empty and we will not configure your repository here."
-         logger
-         ConfSelGit=0
-      fi
-     ;;
-   3) #both git remote and git directory exist.  Don't configure.
-       log_string="The specified repository $gitrepo already exists on this system. Skipping configuration."
-       logger
-       ConfSelGit=0
-     ;;
-  esac
-else
-   log_string="Missing arguments to configure a git repository."
-   logger
-fi
-#Try to configure Git after all validation has occurred
-GitConf
-#Check for presence of openstack swift required variables
+      script_usage
+  fi
+  #Try to configure Git after all validation has occurred
+  GitConf
+  #Check for presence of openstack swift required variables
 
-   #Turn on ConfSelSwift switch based on results
+  #Turn on ConfSelSwift switch based on results
 
-ConfSelectorFlag=0
-log_string="Nothing more to configure."
-logger
+  ConfSelectorFlag=0
+  log_string="Nothing more to configure."
+  logger
 }
 
 #Pulling in options from shell.  Using getopts instead of getopt
 #Capturing options and suppressing getopts errors (leading : in getopts string) for our own error handling
 while getopts ":r:g:A:C:U:K:L:b:h:l:vdpcf-:" flag
   do
-#    echo "$flag" $OPTIND $OPTARG #for testing; will remove later
+    #debugging getopts loop
+    if [ $scriptdebugflag -eq 1 ]
+    then
+        log_string="getopts loop settings:"
+        logger
+        log_string=$(echo "flag="$flag" OPTIND="$OPTIND" OPTARG="$OPTARG"")
+        logger
+    fi
     #Error handling on missing arguments
     if [ $flag = : ]
     then
@@ -894,7 +923,7 @@ while getopts ":r:g:A:C:U:K:L:b:h:l:vdpcf-:" flag
 #                  PullSelectorFlag=1;OPTIND=$(( $OPTIND + 1 ))
 #             ;;
 #             clone) #Completes a temporary git clone moves the code into place and then deletes the directory created.
-#                  gitclone=1;OPTIND=$(( $OPTIND + 1 ))
+#                  gitcloneflag=1;OPTIND=$(( $OPTIND + 1 ))
 #             ;;
 #             project) #same as a git remote shortname
 #                  gitrepo="${!OPTIND}";gitrepoflag=1;OPTIND=$(( $OPTIND + 1 ))
@@ -949,7 +978,7 @@ while getopts ":r:g:A:C:U:K:L:b:h:l:vdpcf-:" flag
        v) log_verbose=1;;
        p) PullSelectorFlag=1;;
        c) ConfSelectorFlag=1;;
-       f) gitclone=1;;
+       f) gitcloneflag=1;;
        *) log_string="Unrecognized flag or argument";logger;exit 5;;
     esac
   #Ending getopts capturing and handling
@@ -964,37 +993,37 @@ while getopts ":r:g:A:C:U:K:L:b:h:l:vdpcf-:" flag
 
 #Start work
 #Check for multiple pull/clone type options and exit if so.
-if [[ $ConfSelectorFlag -eq 1 && $PullSelectorFlag -eq 1 && $gitclone -eq 1 ]]
+if [[ $ConfSelectorFlag -eq 1 && $PullSelectorFlag -eq 1 && $gitcloneflag -eq 1 ]]
 then
-   log_string="You have specified the clone flag, pull flag, and configure flag. These are redundant. Too many options specified. Exiting..."
-   logger
-   log_string="You are able to do a Configure and Pull, but not a configure, pull, and clone."
-   logger
-   exit 1
+    log_string="You have specified the clone flag, pull flag, and configure flag. These are redundant. Too many options specified. Exiting..."
+    logger
+    log_string="You are able to do a Configure and Pull, but not a configure, pull, and clone."
+    logger
+    exit 1
 fi
 
-#Do configuration first
+#Try configuration first
 #Check for configuration option for a scenario where we want the repo stored
 if [ $ConfSelectorFlag -eq 1 ]
 then
-   #Use ConfSelector Function to figure out what we need to configure
-   ConfSelector
+    #Use ConfSelector Function to figure out what we need to configure
+    ConfSelector
 fi
 
-#Do Pull Second
+#Try pull second
 #check for pull flag
 if [ $PullSelectorFlag -eq 1 ]
 then
-   #Use PullSelector Function to figure out what we need to pull
-   PullSelector
+    #Use PullSelector Function to figure out what we need to pull
+    PullSelector
 fi
 
-#Do a stand-alone clone Third
-#check for the gitclone flag
-if [ $gitclone -eq 1 ]
+#Try a stand-alone clone third
+#check for the gitcloneflag
+if [ $gitcloneflag -eq 1 ]
 then
-   #Do a git clone
-   GitClone
+    #Do a git clone
+    GitClone
 fi
 
 #Check for success and exit with appropriate error code
