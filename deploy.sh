@@ -115,11 +115,7 @@ function script_usage {
   echo 
   echo
   #error code for bad usage syntax or missing arguments
-  log_string="Exit due to bad script usage syntax or missing arguments."
-  logger
-  exit 5
 }
-
 
 
 function script_debug {
@@ -258,7 +254,7 @@ function GitBranchChange {
       logger
       log_string="Changing branch from $gitcurrentbranch to $gitrepobranch."
       logger
-      git checkout $gitrepobranch 2>&1>>$log
+      git checkout $gitrepobranch 2>&1&>>$log
       if [ $? -eq 0 ]
       then
           GitBranchCheck
@@ -277,7 +273,7 @@ function CreateDir {
   #creates a new directory and verifies.
   log_string="Creating missing directory."
   logger
-  mkdir -p $dirpath 2>&1>>$log
+  mkdir -p $dirpath 2>&1&>>$log
   if [ $? -eq 0 ]
   then
       log_string="Directory created."
@@ -310,7 +306,7 @@ function GitRemoteCheck {
       log_string="Checking for existing git remote."
       logger
       cd $gitrepohome$gitrepo
-      git remote | grep $gitrepo 2>&1>>$log
+      git remote | grep $gitrepo 2>&1&>>$log
       if [ $? -eq 0 ]
       then 
           log_string="git remote shortname exists."
@@ -379,9 +375,8 @@ function DataMove {
   log_string="Attempting to move data into place."
   logger
   #move code from repodir to live landing dir
-  rsync -av --progress $dirpath* $landinghome --exclude .git 2>&1>>$log
+  rsync -av --progress $dirpath* $landinghome --exclude ".gitosmanifest.lst" 2>&1&>>$log
   #clear dirpath just in case 
-  dirpath=""
   #Check if it went well
   if [ $? -eq 0 ]
   then
@@ -393,6 +388,7 @@ function DataMove {
      logger
      operationfail=$((operationfail + 1))
   fi
+  dirpath=""
 }
 
 
@@ -406,27 +402,27 @@ function GitConf {
       cd $gitrepohome
       log_string="In Directory:"
       logger
-      pwd 2>&1>>$log
+      pwd 2>&1&>>$log
       #Clone the repo
       log_string="Configuring Git..."
       logger
       #Change to the gitrepohome directory
       cd $gitrepohome
       #Clone the repo
-      git clone $giturl 2>&1>>$log &
+      git clone $giturl 2>&1&>>$log &
       #wait for it
       wait $!
       #Validate successful clone
       if [ $? -eq 0 ]
       then
           #Set permissions on the new directory
-          chmod 755 $gitrepohome$gitrepo 2>&1>>$log
+          chmod 755 $gitrepohome$gitrepo 2>&1&>>$log
           #Change to the new directory
           cd $gitrepohome$gitrepo
           #Change the repo name from origin to match the project name - will keep systems with many repos from getting confusing
           log_string="Changing origin to match the project name"
           logger
-          git remote rename origin $gitrepo 2>&1>>$log
+          git remote rename origin $gitrepo 2>&1&>>$log
           #Re-check that the repo was created; for verification that work was completed properly
       else
           log_string="git clone returned non zero exit code."
@@ -465,7 +461,7 @@ function GitPull {
       #Check the landing path exists before we bother pulling it will fail if it doesn't
       GitLandingHomeCheck
       #Pull in the code
-      git pull $gitrepo $gitrepobranch 2>&1>>$log &
+      git pull $gitrepo $gitrepobranch 2>&1&>>$log &
       #wait for it
       wait $!
       #Validate pull
@@ -479,7 +475,7 @@ function GitPull {
           exit 1
       fi
       #make sure the branch is exactly the same as remote
-      git reset --hard $gitrepo/$gitrepobranch 2>&1>>$log
+      git reset --hard $gitrepo/$gitrepobranch 2>&1&>>$log
       #Validate reset
       if [ $? -eq 0 ]
       then
@@ -558,7 +554,216 @@ function OSSwiftExistCheck {
   fi
 }
 
-function OSSwiftPull {
+function OSSwiftDirectoryPull {
+ if [ $PullSelSwift -eq 1 ]
+  then
+      #Make sure swift exists
+      OSSwiftExistCheck
+      #Make sure oslanding exists
+      OSSwiftLandingHomeCheck
+      #Make sure datahome exists
+      OSSwiftDataHomeCheck
+      #Test openstack credentials
+      OSSwiftAuthCheck
+      if [ $osauthpass -eq 1 ]
+      then
+         #Make sure container exists
+         OSSwiftContainerCheck
+         if [ $oscontainerexist -eq 1 ]
+         then
+             #Make a directory to match the container name, we'll use the CreateDir function for validation
+             #Set the variables for function use
+             dirpath="$datahome$oscontainer"
+             log_string="Attempting to create directory $dirpath"
+             logger
+             CreateDir
+             #Change to the container directory
+             cd $datahome$oscontainer
+             #Complete the container pull
+             log_string="Performing a pull of openstack swift container $oscontainer path $ospath"
+             logger
+             #list the contents into a file
+             swift -A $osauthurl -U $osuser -K $oskey list $oscontainer -p $ospath > "$datahome$oscontainer/osmanifest.lst"
+             #do while reading in the osmanifest.lst file names pull down the filename
+             log_string="Swift Directory Downloader:"
+             logger
+             #read the manifest.lst to figure out what to download from the folder
+             cat "$datahome$oscontainer/osmanifest.lst" | while read FILENAME 
+               do
+                 log_string="Attempting openstack swift download of: $FILENAME"
+                 logger
+                 swift -A $osauthurl -U $osuser -K $oskey download $oscontainer "$FILENAME" 2>&1&>>$log
+                 #Check if the download happened properly
+                 if [ $? -eq 0 ]
+                 then
+                     log_string="$FILENAME downloaded from swift container $oscontainer."
+                     logger
+                 else
+                     log_string="$FILENAME failed to download from swift container $oscontainer"
+                     logger
+                     exit 1
+                 fi
+               done
+             #Move the data into place
+               #Set the landinghome to openstack landing home specified
+               landinghome=${oslandinghome}
+               log_string="Landing home set to $landinghome."
+               logger
+               dirpath="$datahome$oscontainer/"
+               log_string="Attempting to move data from $dirpath"
+               logger
+               DataMove
+             #Cleanup
+             rm -f $landinghome/osmanifest.lst
+             log_string="Cleaning up temporary files/directories."
+             logger
+             cd $datahome
+             log_string="Current Directory:"
+             logger
+             log_string="$(pwd)"
+             logger
+             rm -rf $datahome$oscontainer 2>&1&>>$log
+         else
+             log_string="No valid openstack swift container file to pull."
+             logger
+             operationfail=$((operationfail + 1))
+         fi
+      else
+         log_string="Can't pull from openstack swift with bad credentials."
+         logger
+         operationfail=$((operationfail + 1))
+      fi
+  else
+      log_string="openstack swift pull was not qualified. See log file $log for more details."
+      logger
+  fi
+}
+
+function OSSwiftFilePull {
+echo
+ if [ $PullSelSwift -eq 1 ]
+  then
+      #Make sure swift exists
+      OSSwiftExistCheck
+      #Make sure oslanding exists
+      OSSwiftLandingHomeCheck
+      #Make sure datahome exists
+      OSSwiftDataHomeCheck
+      #Test openstack credentials
+      OSSwiftAuthCheck
+      if [ $osauthpass -eq 1 ]
+      then
+         #Make sure container exists
+         OSSwiftContainerCheck
+         if [ $oscontainerexist -eq 1 ]
+         then
+             #Make a directory to match the container name, we'll use the CreateDir function for validation
+             #Set the variables for function use
+             dirpath="$datahome$oscontainer"
+             log_string="Attempting to create directory $dirpath"
+             logger
+             CreateDir
+             #Change to the container directory
+             cd $datahome$oscontainer
+             #Complete the container pull
+             log_string="Performing a pull of openstack swift container $oscontainer path $ospath"
+             logger
+             #list the file to see if it exists
+             swift -A $osauthurl -U $osuser -K $oskey list $oscontainer -p $ospath > "$datahome$oscontainer/osmanifest.lst"
+             if [ $? -eq 0 ]
+             then
+                 log_string="Swift File Downloader:"
+                 logger
+                 log_string="Attempting openstack swift download of: $ospath"
+                 logger
+                 swift -A $osauthurl -U $osuser -K $oskey download $oscontainer "$ospath" 2>&1&>>$log
+                 #Check if the download happened properly
+                 if [ $? -eq 0 ]
+                 then
+                     log_string="$ospath downloaded from swift container $oscontainer."
+                     logger
+                 else
+                     log_string="$ospath failed to download from swift container $oscontainer"
+                     logger
+                     exit 1
+                 fi
+               #Move the data into place
+               #Set the landinghome to openstack landing home specified
+               landinghome=${oslandinghome}
+               log_string="Landing home set to $landinghome."
+               logger
+               dirpath="$datahome$oscontainer/"
+               log_string="Attempting to move data from $dirpath"
+               logger
+               DataMove
+             #Cleanup
+             rm -f $landinghome/osmanifest.lst
+             log_string="Cleaning up temporary files/directories."
+             logger
+             cd $datahome
+             log_string="Current Directory:"
+             logger
+             log_string="$(pwd)"
+             logger
+             rm -rf $datahome$oscontainer 2>&1&>>$log
+             fi
+         else
+             log_string="No valid openstack swift container file to pull."
+             logger
+             operationfail=$((operationfail + 1))
+         fi
+      else
+         log_string="Can't pull from openstack swift with bad credentials."
+         logger
+         operationfail=$((operationfail + 1))
+      fi
+  else
+      log_string="openstack swift pull was not qualified. See log file $log for more details."
+      logger
+  fi
+
+}  
+
+function OSSwiftPathPullSelector {
+  #Pulls in a openstack swift file or entire directory path
+   if [ $PullSelSwift -eq 1 ]
+   then
+       lastchar="${ospath: -1:1}" #used to check for a forward slash denoting a direcory
+       if [ $scriptdebugflag -eq 1 ]
+       then
+           log_string="lastchar=$lastchar"
+           logger
+       fi
+       directory=0 #switch set based on results of validation in this function
+       file=0
+       #check if the path is a directory or a file
+       if [[ $lastchar == / ]]
+       then
+           directory=1
+           file=0
+           log_string="The openstack swift path is a directory."
+           logger
+       else
+           directory=0
+           file=1
+           log_string="The openstack swift path is a file."
+           logger
+       fi
+       if [ $directory -eq 1 ]
+       then
+           OSSwiftDirectoryPull
+       else
+           OSSwiftFilePull
+       fi
+   else 
+       #easter egg
+       log_string="Help me I'm stoned....."
+       logger
+       exit 420
+   fi
+}
+
+function OSSwiftContainerPull {
   #Pulls stored data from Openstack or Rackspace
   log_string="Attempting to pull openstack swift container."
   logger
@@ -589,7 +794,7 @@ function OSSwiftPull {
              #Complete the container pull
              log_string="Swift Download:"
              logger
-             swift -A $osauthurl -U $osuser -K $oskey download $oscontainer 2>&1>>$log
+             swift -A $osauthurl -U $osuser -K $oskey download $oscontainer 2>&1&>>$log
              #wait for it
              wait $!
              #Move the data into place
@@ -604,8 +809,13 @@ function OSSwiftPull {
              #Cleanup
              log_string="Cleaning up temporary files/directories."
              logger
-
-
+             cd $datahome
+             log_string="Current Directory:"
+             logger
+             log_string="$(pwd)"
+             logger
+             rm -rf $datahome$oscontainer 2>&1&>>$log
+             
          else
              log_string="No valid openstack swift container to pull."
              logger
@@ -688,7 +898,6 @@ function PullSelector {
   else
      log_string="Missing arguments to pull git a git repository."
      logger
-     script_usage
   fi
   #Done with git
   #Start checking for openstack swift
@@ -703,18 +912,22 @@ function PullSelector {
           #pull the specified openstack swift object
           #turns on the pull selector switch for openstack
           PullSelSwift=1
-          OSSwiftFilePull
+          if [ $scriptdebugflag -eq 1 ]
+          then
+              log_string="PullSelSwift=$PullSelSwift"
+              logger
+          fi
+          OSSwiftPathPullSelector
       else
           #pull the entire container down
           #turns on the pull selector switch for openstack
           PullSelSwift=1
-          OSSwiftPull
+          OSSwiftContainerPull
       fi
   else
       #Missing openstack swift parameters 
       log_string="Missing arguments to pull from openstack swift."
       logger
-      script_usage
   fi
   #Done swift
   #turn off the Pull Selector Flag
@@ -745,13 +958,13 @@ function GitClone {
       #Check that the landing path exists before we bother cloning.  It will fail if it doesn't
       GitLandingHomeCheck
       #Clone the repo
-      git clone $giturl 2>&1>>$log &
+      git clone $giturl 2>&1&>>$log &
       #wait for it
       wait $!
       #Figure out what the repo directory is by separating the project name from the URL - **was a pain
       gitrepo=$(basename ${giturl%.*})
       #Set permissions on the new directory
-      chmod 755 $gitrepohome$gitrepo 2>&1>>$log
+      chmod 755 $gitrepohome$gitrepo 2>&1&>>$log
       #Change to the new directory
       cd $gitrepohome$gitrepo
       #Check what branch we're in
@@ -767,7 +980,7 @@ function GitClone {
       DataMove
       #Cleanup
       cd $gitrepohome
-      rm -rf $gitrepohome$gitrepo 2>&1>>$log
+      rm -rf $gitrepohome$gitrepo 2>&1&>>$log
       if [ $? -eq 0 ]
       then
           log_string="Removed temporary repository data."
@@ -844,7 +1057,7 @@ function ConfSelector {
                 log_string="Directory is empty. Removing."
                 logger
                 #so we return proper error codes with CreateDir function
-                rmdir $gitrepohome$gitrepo 2>&1>>$log
+                rmdir $gitrepohome$gitrepo 2>&1&>>$log
                 ConfSelGit=1
             else
                 log_string="The repository specified matches an existing directory $gitrepohome$gitrepo.  It is not empty and we will not configure your repository here."
@@ -876,14 +1089,14 @@ function ConfSelector {
 
 #Pulling in options from shell.  Using getopts instead of getopt
 #Capturing options and suppressing getopts errors (leading : in getopts string) for our own error handling
-while getopts ":r:g:A:C:U:K:L:b:h:l:vdpcf-:" flag
+while getopts ":r:g:A:C:U:K:P:L:b:h:l:vdpcf-:" flag
   do
     #debugging getopts loop
     if [ $scriptdebugflag -eq 1 ]
     then
         log_string="getopts loop settings:"
         logger
-        log_string=$(echo "flag="$flag" OPTIND="$OPTIND" OPTARG="$OPTARG"")
+#        log_string=$(echo "flag="$flag" OPTIND="$OPTIND" OPTARG="$OPTARG"")
         logger
     fi
     #Error handling on missing arguments
@@ -974,8 +1187,8 @@ while getopts ":r:g:A:C:U:K:L:b:h:l:vdpcf-:" flag
        l) gitlandinghome=$OPTARG;;
        b) gitrepobranch=$OPTARG;gitrepobranchflag=1;;
        h) host=$OPTARG;;
-       d) scriptdebugflag=1;;
-       v) log_verbose=1;;
+       d) scriptdebugflag=1;echo "Script Debugging specified";echo "Script Debugging specified" >> $log;;
+       v) log_verbose=1;echo "Verbose Logging specified";echo "Verbose Logging specified" >> $log;;
        p) PullSelectorFlag=1;;
        c) ConfSelectorFlag=1;;
        f) gitcloneflag=1;;
