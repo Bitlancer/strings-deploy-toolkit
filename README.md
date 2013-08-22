@@ -27,7 +27,7 @@ The script is passed several parameters
 **post-exec.sh**
 
 This script is executed after the customer's script is executed. It is responsible for:
-* Cleaning up (deleting the content downloaded as part of the customer's script)
+* Clean up (deleting the content downloaded as part of the customer's script)
 * Removing the LOCK file
 
 ### Customer script
@@ -44,6 +44,6 @@ associated with the script. The servers and server attributes are formatted in a
 ### Jump server configuration
 
 * A user "remoteexec", set in the API configuration, must be created on the jump server. The account will be used by the API to execute the script on the customer's behalf.
-* Create a "deploy" directory within the remoteexec's home directory.
+* Create a "deploy" directory within remoteexec's home directory.
 * Pull down the pre and post execution template scripts and put them in the "deploy" directory
 
