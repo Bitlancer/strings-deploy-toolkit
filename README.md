@@ -11,7 +11,7 @@ currently used exclusively for deploying code.
 
 ### Callback scripts
 
-The remote execution process includes two-callbacks, "pre-exec.sh" and "post-exec.sh", which are called before and after execution of the customer's script.
+The remote execution process includes two callbacks, "pre-exec.sh" and "post-exec.sh", which are called before and after execution of the customer's script.
 
 **pre-exec.sh**
 
