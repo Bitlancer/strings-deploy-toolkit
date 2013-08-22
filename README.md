@@ -5,7 +5,9 @@ Bitlancer Strings Deploy Framework Toolkit
 
 ## Remote Execution
 
-**Remote execution** is the term given to the Strings process for remotely executing a distributed script. This process is currently used almost exclusively for deploying code.
+**Remote execution** is the term given to the Strings process for remotely executing a distributed script. This process is 
+currently used exclusively for deploying code.
+
 
 ### Callback scripts
 
@@ -30,14 +32,13 @@ This script is executed after the customer's script is executed. It is responsib
 
 ### Customer script
 
-#### Parameters
-
-The customer's script is passed any parameters the customer supplied when configuring the script in the dashboard. Additionally
-the script will passed a parameter "--server-list" containing a list of servers and server attributes which are associated with
-script.
-
 **--server-list**
 
+In addition to passing those parameters defined when the script was configured, a "--server-list" parameter is also passed
+to the customer's script. The "--server-list" parameter contains the list of servers and server attributes which are 
+associated with the script. The servers and server attributes are formatted in a very specific way.
+
+--server-list "serverFQDN,role,profile,profile,...|serverFQDN,role,profile,profile..."
 
 
 ### Jump server configuration
@@ -46,7 +47,3 @@ script.
 * Create a "deploy" directory within the remoteexec's home directory.
 * Pull down the pre and post execution template scripts and put them in the "deploy" directory
 
-
-
-* Managing a LOCK file to prevent two scripts from being executed simultaneously
-  * Downloading the customer script from the source
