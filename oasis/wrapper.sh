@@ -125,43 +125,5 @@ while [ $validate_count -lt 11 ]; do
 
 done
 
-#Get Parameters supplied from Strings
-  #model
-  log_string=$1
-  logger
-  log_string=$2
-  logger
-
-  #model name
-  log_string=$3
-  logger
-  log_string=$4
-  logger
-  
-  #server list
-  log_string=$5
-  logger
-  log_string=$6
-  logger
-
-  #cloud files credentials
-  log_string=$7
-  logger
-  log_string=$8
-  logger
-
-  #repository
-  log_string=$9
-  logger
-  log_string=${10}
-  logger
-
-  #ref
-  log_string=${11}
-  logger
-  log_string=${12}
-  logger
-
-
 #Exiting Clean
 exit 0
