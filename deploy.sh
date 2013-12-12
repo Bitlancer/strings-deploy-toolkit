@@ -990,6 +990,7 @@ function GitClone {
       dirpath="$gitrepohome$gitrepo/"
       log_string="Attempting to move data from $dirpath"
       logger
+#Gotta move this stuff out and figure out more to make wrapper work right -12-10-13-ajh
       DataMove
       #Cleanup
       cd $gitrepohome
