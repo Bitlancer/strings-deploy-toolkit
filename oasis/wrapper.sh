@@ -1,11 +1,17 @@
 #!/bin/bash
 
+#sourcing our models
+source ./*.model #functions that build an application model
+#sourcing check_model function to keep this script modular
+source ./models.case
+
 #variables
 log_verbose=1 		#whether or not to display output on terminal screen
 log=/var/log/bitlancer-wrapper.log #logfile name
 model="" 		#passed from strings
 model_name="" 		#passed from Strings
 server_list="" 		#passed from Strings
+server_array=""		#Used to parse server list
 server_hostname=""	#used in building command list
 server_role=""		#used in building command list
 server_profile=""       #used in building command list
@@ -17,6 +23,14 @@ validate_string=""	#Used for validation switches
 validate_param="" 	#Used for obtaining valid switches parameters
 validate_success=0 	#Switch to check status of switch validity
 validate_var="" 	#variable to set in script from Strings variables
+OFS=$(echo $IFS)
+echo "OFS is set to $OFS"
+
+#sourcing our models
+source ./*.model #functions that build an application model
+#sourcing check_model function to keep this script modular
+source ./models.case
+
 
 
 #Functions
@@ -41,10 +55,10 @@ function get_parameter {
   #Used to grab the valid switch's parameter string
   log_string=$validate_param
   logger
-  eval $validate_var=$validate_param
+  eval $validate_var='$validate_param'
   log_string="validate_var set to $validate_var"
   logger
-  eval log_string=\${$validate_var}
+  eval log_string=\${"${validate_var}"}
   logger
   echo
 }
@@ -106,26 +120,96 @@ function validate_input {
   #fi   
 }
 
+
 function role_check {
   #Checks to see what role we're using and determines what work to do
   case "$server_role" in
-    "Drupal 7 Web Server") echo "Drupal 7 Web Server"
+    "Drupal 7 Web Server") log_string="Role is: $server_role"
+                           logger
                            ;;
-    "Primary MySQL Server") echo "Primary MySQL Server"
+    "Primary MySQL Server") log_string="Role is: $server_role"
+                            logger 
                             ;;
   esac
 }
 
-function profile_check {
+
+#to be removed
+#function check_model {
+#  #Checks to see what application we're deploying and takes the proper steps of execution
+#  source ./models.case
+#  case "$model_name" in
+#    "amqp-org") log_string="amqp-org is the model to deploy"
+#                logger
+#                ;;
+#    "oasis-oslc") log_string="oasis-oslc is the model to deploy"
+#                  logger
+#                  ;;
+#    *) log_string="Unknown model specified: $model_name"
+#       logger
+#       exit 1
+#       ;;
+#  esac
+#}
+#end of removed
+
+function check_profile () {
   #Checks to see what profiles we're using and determines what work to do
+  server_profile="$1"
+  echo "Checking Profile: $server_profile"
   case "$server_profile" in
-    "Apache Web Server") echo "Apache Web Server"
+    "Apache Web Server") log_string="Profile is: $server_profile"
+                         logger
                          ;;
-    "Base Node") echo "Base Node"
+    "Base Node") log_string="Profile is: $server_profile"
+                 logger
                  ;;
+    "MySQL Server") log_string="Profile is: $server_profile"
+                    logger
+                    ;;
+    *) log_string="Unrecognized Server Profile Name specified: $server_profile"
+       logger
+       exit 1 
+         ;;
   esac
 }
 
+
+function parse_serverlist {
+  #Reads server_list string and starts doing work
+  IFS=';' #changed the internal field selector to 
+  read -ra single_server_list <<< "$server_list"
+  for i in "${single_server_list[@]}"; do
+    log_string="single_server_list is: $i"
+    logger
+    #do work on single_server_list now that we have it
+    IFS=',' #changed the internal field separator to split on comma
+    read -ra item <<< "$i"  #created an array for the single_server_list items
+    log_string="List by array index"
+    logger
+    log_string="${item[0]}"  #hostname
+    logger
+    log_string="${item[1]}"  #role
+    logger
+    log_string="${item[2]}"  #profile 1
+    logger
+    log_string="${item[3]}"  #profile 2
+    logger
+    check_profile "${item[2]}"
+    #put some logic now that we have a profile and model to deploy
+      #run the models profile command structure
+      eval `echo "$model_name" | tr -d ' '`_`echo "$server_profile" | tr -d ' '` #this launches the .model function
+    check_profile "${item[3]}"
+    #put some logic now that we have a profile and model to deploy
+    eval `echo "$model_name" | tr -d ' '`_`echo "$server_profile" | tr -d ' '` #this lau
+nches the .model function
+    
+    
+  done
+}
+
+
+echo "${item[0]}"
 #Start Logging
 log_string="--------------------------------------------------"
 logger
@@ -134,6 +218,7 @@ log_string="Work Received on: `date`"
 logger
 
 #Read in Variables from Strings
+  #12 possible parameters
   while [ $validate_count -lt 11 ]; do
     validate_count=$((validate_count +1))
     eval validate_string=\${$validate_count}
@@ -144,9 +229,16 @@ logger
     else
        eval validate_param=\${$validate_count}
        get_parameter
+       #reset to 0 so loop works
        validate_success=0
     fi
   done
+
+
+echo "The server list is: $server_list"
+check_model
+parse_serverlist
+
 
 #Download Strings-Deploy-Toolkit from github
    #Things we need
@@ -180,6 +272,10 @@ logger
   #run the command list
   #collect return code and report to log
     #greater than 0 is error in our case I have specific error codes in deploy.sh that could let us know more.
+
+#Set the internal field separator back to what it was when we started
+IFS=$OFS
+echo "Set internal field separator back to: $IFS"
 
 #Exit Clean
 exit 0
