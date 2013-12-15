@@ -1,0 +1,21 @@
+#edit this case to have the appropriate cases that you will be feeding it
+
+function check_model {
+  #Checks to see what application we're deploying and takes the proper steps of execution
+  source ./models.case
+  case "$model_name" in
+    "amqp-org") log_string="amqp-org is the model to deploy"
+                logger
+                ;;
+    "oasis-oslc") log_string="oasis-oslc is the model to deploy"
+                  logger
+                  ;;
+    #this case should be left for any model set
+    *) log_string="Unknown model specified: $model_name"
+       logger
+       exit 1
+       ;;
+  esac
+}
+
+#Don't add any new variables in here, you could inadvertantly hurt your deployment

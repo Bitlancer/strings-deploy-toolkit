@@ -1,0 +1,15 @@
+#move this example to a valid name like: YourModelName_YourServerProfile.model
+#"Example Model_Example Profile" model file
+#These models are bash script functions that will build your model
+#A model function must be named with a .model extension
+#A model function must be named without the spaces that are in strings it to function
+#  function NameOfYourModel_NameOfYourProfile {
+#     work to do
+#  }
+#
+#You can place multiple model functions in a single model file if desired
+#Example I have a website to deploy called "My Site" and you want it on the 
+#"Apache Web Server" Profile.  You want to name the model function as such due to spaces:
+#function MySite_ApacheWebServer" {
+#  work
+#}

@@ -1,0 +1,24 @@
+#move this file to models.case to use
+#There can be only one models.case file
+#edit this case to have the appropriate cases that you will be feeding it
+
+function check_model {
+  #Checks to see what application we're deploying and takes the proper steps of execution
+  source ./models.case
+  case "$model_name" in
+    "example1") log_string="$model_name is the model to deploy"
+                logger
+                ;;
+    "example2") log_string="$model_name is the model to deploy"
+                  logger
+                  ;;
+    #you get the picture, keep making cases
+    #this case should be left for any model set
+    *) log_string="Unknown model specified: $model_name"
+       logger
+       exit 1
+       ;;
+  esac
+}
+
+#Don't add any new variables in here, you could inadvertantly hurt your deployment
