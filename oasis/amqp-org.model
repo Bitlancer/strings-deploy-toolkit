@@ -3,10 +3,15 @@ function amqp-org_ApacheWebServer {
   #steps to deploy a amqp-org web server
   log_string="Deploying amqp-org Apache Web Server"
   logger
-  echo "SWWWWWWWWWWEEEEEEEEEEEETTTTTTTTTTTTTT MAAANNNN"
 }
 
 function amqp-org_MySQLServer {
   log_string="No deploy work to do for a MySQL Server Profile."
   logger
 }
+
+function amqp-org_BaseNode {
+  log_string="No deploy work to do for a Base Node Server Profile."
+  logger
+}
+
