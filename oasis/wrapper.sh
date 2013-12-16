@@ -1,10 +1,5 @@
 #!/bin/bash
 
-#sourcing our models
-source ./*.model #functions that build an application model
-#sourcing check_model function to keep this script modular
-source ./models.case
-
 #variables
 log_verbose=1 		#whether or not to display output on terminal screen
 log=/var/log/bitlancer-wrapper.log #logfile name
@@ -201,8 +196,7 @@ function parse_serverlist {
       eval `echo "$model_name" | tr -d ' '`_`echo "$server_profile" | tr -d ' '` #this launches the .model function
     check_profile "${item[3]}"
     #put some logic now that we have a profile and model to deploy
-    eval `echo "$model_name" | tr -d ' '`_`echo "$server_profile" | tr -d ' '` #this lau
-nches the .model function
+    eval `echo "$model_name" | tr -d ' '`_`echo "$server_profile" | tr -d ' '` #this launches the .model function
     
     
   done
