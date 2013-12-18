@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #variables
-source ../deploy-common.conf #Reads common variables between deploy.sh and wrapper.sh
+source ./deploy-common.conf #Reads common variables between deploy.sh and wrapper.sh
 log_verbose=1 		#whether or not to display output on terminal screen
 log=/var/log/bitlancer-wrapper.log #logfile name
 model="" 		#passed from strings
@@ -150,6 +150,13 @@ function check_profile () {
   esac
 }
 
+function create_tarball {
+  #packages our repository and data for deployment
+  
+    #if repo switch and cloudfiles we need to combine and then tar
+    
+    tar -zcvf $gitrepohome$ref/$model_name.tar.gz $gitrepohome$ref/$reposhort
+}
 
 function parse_serverlist {
   #Reads server_list string and starts doing work
@@ -212,7 +219,7 @@ logger
 reposhort=$(basename ${repo%.*})
 check_model #this is in models.case file and sourced at runtime
 #Pull in git repo provided
-./deploy.sh -c -g "$repo" -r "$reposhort" -R $ref
+../deploy.sh -c -g "$repo" -r "$reposhort" -R $ref
 #wait for it
 wait $!
 if [[ $? -eq 0 ]]
@@ -224,7 +231,7 @@ else
     logger
     exit 5
 fi
-
+create_tarball
 parse_serverlist
 
 #Download Strings-Deploy-Toolkit from github
