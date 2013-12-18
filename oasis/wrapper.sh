@@ -1,6 +1,7 @@
 #!/bin/bash
 
 #variables
+source ./deploy-common.conf #Reads common variables between deploy.sh and wrapper.sh
 log_verbose=1 		#whether or not to display output on terminal screen
 log=/var/log/bitlancer-wrapper.log #logfile name
 model="" 		#passed from strings
@@ -19,7 +20,6 @@ validate_param="" 	#Used for obtaining valid switches parameters
 validate_success=0 	#Switch to check status of switch validity
 validate_var="" 	#variable to set in script from Strings variables
 OFS=$(echo $IFS)
-echo "OFS is set to $OFS"
 
 #sourcing our models
 source ./*.model #functions that build an application model
@@ -183,7 +183,6 @@ function parse_serverlist {
 }
 
 
-echo "${item[0]}"
 #Start Logging
 log_string="--------------------------------------------------"
 logger
@@ -211,8 +210,15 @@ logger
 
 echo "The server list is: $server_list"
 check_model #this is in models.case file and sourced at runtime
-parse_serverlist
+#Pull in git repo provided
+./deploy.sh -c -g "$repo" -R $ref
+#wait for it
+wait $!
+if [[ $? -eq 0 ]]
+then
+    log_string="Downloaded git repository."
 
+parse_serverlist
 
 #Download Strings-Deploy-Toolkit from github
    #Things we need

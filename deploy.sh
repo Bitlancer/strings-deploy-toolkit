@@ -2,6 +2,7 @@
 
 
 #variables
+source ./deploy-common.conf #Reads common variables between deploy.sh and wrapper.sh 
 log="/var/log/bitlancer-deploy.log" #log path
 host="" #used for deploying to a host or many hosts
 gitrepo="" #git repostitory specified by user at runtime
@@ -40,11 +41,6 @@ PullSelSwift=0 #Set by PullSelector function. Used for pulling swift containers.
 gitremoteexist=0 #Set by GitRemoteCheck function. Used in various places as a verification mechanism.
 dirpath="" #Needs to be set by directory check functions for use with CreateDir function
 dirsuccess=0 #Set by CreateDir function and used for verification in GitConf and SwiftConf.
-gitrepohome=~/deploy/repodata/ #Where working repos live.
-datahome=~/deploy/osdata/ #Where cached openstack swift/cloud files live.
-gitlandinghome="/var/www/vhosts/" #Where you want the data to land if using virtual hosts specify -l and the path on the command line
-oslandinghome="/var/www/vhosts/"
-landinghome="" #used prior to doing DataMove by each pull/clone function
 scriptdebugflag=0
 operationsuccess=0
 operationfail=0
@@ -52,7 +48,6 @@ tararchive="" #file to deploy
 tarextractflag=0 #Gets turned on by getopts
 tarlandinghome="" #where the file should deploy to
 servicename="" #service to restart
-staginghome="" #where to stage the files prior to deployment
 lock="/var/lock/deploy"
 ref="" #reference 
 #Setup Logging
@@ -435,8 +430,6 @@ function GitConf {
       #Clone the repo
       log_string="Configuring Git..."
       logger
-      #Change to the gitrepohome directory
-      cd $gitrepohome
       #Clone the repo
       git clone $giturl 2>&1&>>$log &
       #wait for it
@@ -1049,6 +1042,14 @@ function ConfSelector {
   if [[ $ConfSelectorFlag -eq 1 && $giturlflag -eq 1 && $gitrepoflag -eq 1 ]]
   then
       #Check if the gitrepohome exists
+       #Adding support for reference numbers
+      if [[ $ref != "" ]]
+      then
+          echo "TESTING"
+          echo $gitrepohome
+          gitrepohome="$gitrepohome$ref/"
+          echo $gitrepohome
+      fi
       log_string="Checking for an existing gitrepohome path: $gitrepohome"
       logger
       GitRepoHomeCheck
@@ -1225,7 +1226,7 @@ function ExtractTarball {
 
 #Pulling in options from shell.  Using getopts instead of getopt
 #Capturing options and suppressing getopts errors (leading : in getopts string) for our own error handling
-while getopts ":r:g:a:s:S:A:C:U:K:P:L:R:b:h:l:vtdpcf-:" flag
+while getopts ":r:g:a:s:R:S:A:C:U:K:P:L:b:h:l:vtdpcf-:" flag
   do
     #debugging getopts loop
     if [ $scriptdebugflag -eq 1 ]
