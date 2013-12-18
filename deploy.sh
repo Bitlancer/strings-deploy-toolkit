@@ -1045,10 +1045,7 @@ function ConfSelector {
        #Adding support for reference numbers
       if [[ $ref != "" ]]
       then
-          echo "TESTING"
-          echo $gitrepohome
           gitrepohome="$gitrepohome$ref/"
-          echo $gitrepohome
       fi
       log_string="Checking for an existing gitrepohome path: $gitrepohome"
       logger

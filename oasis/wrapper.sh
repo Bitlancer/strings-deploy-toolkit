@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #variables
-source ./deploy-common.conf #Reads common variables between deploy.sh and wrapper.sh
+source ../deploy-common.conf #Reads common variables between deploy.sh and wrapper.sh
 log_verbose=1 		#whether or not to display output on terminal screen
 log=/var/log/bitlancer-wrapper.log #logfile name
 model="" 		#passed from strings
@@ -13,6 +13,7 @@ server_role=""		#used in building command list
 server_profile=""       #used in building command list
 cloud_files_credentials="" #passed from Strings
 repo="" 		#passed from Strings
+reposhort=""$(basename ${repo%.*})
 ref="" 			#passed from Strings
 validate_count=0 	#Used for validating switches
 validate_string=""	#Used for validation switches
@@ -207,16 +208,22 @@ logger
     fi
   done
 
-
-echo "The server list is: $server_list"
+#set the repo shortname now that we read in variables a req't of deploy.sh GitConf func.
+reposhort=$(basename ${repo%.*})
 check_model #this is in models.case file and sourced at runtime
 #Pull in git repo provided
-./deploy.sh -c -g "$repo" -R $ref
+./deploy.sh -c -g "$repo" -r "$reposhort" -R $ref
 #wait for it
 wait $!
 if [[ $? -eq 0 ]]
 then
     log_string="Downloaded git repository."
+    logger
+else
+    log_string="Download of git repository failed."
+    logger
+    exit 5
+fi
 
 parse_serverlist
 
