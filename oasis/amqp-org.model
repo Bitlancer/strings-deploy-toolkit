@@ -1,9 +1,84 @@
-#"amqp-org_Apache Web Server" model file
+#"amqp-org" model file
+
 function amqp-org_ApacheWebServer {
   #steps to deploy a amqp-org web server
   log_string="Deploying amqp-org Apache Web Server"
   logger
-}
+  check_model #this is in models.case file and sourced at runtime
+  #Check to see if we need to pull in the repository
+  if [[ -d $gitrepohome$ref/$reposhort ]]
+  then
+      log_string="Repo already exists, skipping clone."
+      logger
+  else
+      log_string="Repo does not exist, cloning for deployment."
+      logger
+      #Pull in git repo provided
+      ../deploy.sh -c -g "$repo" -r "$reposhort" -R $ref
+      #wait for it
+      wait $!
+      if [[ $? -eq 0 ]]
+      then
+          log_string="Downloaded git repository."
+          logger
+      else
+          log_string="Download of git repository failed."
+          logger
+          exit 5
+      fi
+  fi
+
+  #Check to see if we need to pull in the apache configs from config repo
+  #if
+  #then
+  #else
+  #fi
+
+  #Check to see if we need to pull in the cloudfiles data
+  #if
+  #then
+  #else
+  #fi
+  
+  #Put the data together for packaging
+  #mv stuff
+  
+  #Check if the tarball is there already
+  #if
+  #then
+  #else
+    #create_tarball
+  #fi
+  
+  #scp it to the server
+  #scp
+  
+  #write deploy.sh untar command into servername.ref.sh
+
+  #write command to test apache configs into servername.ref.sh
+
+  #write command to stop apache into servername.ref.sh
+
+  #write command to mv old apache config to /root/deploy/backup/httpd.conf into servername.ref.sh
+
+  #write command to mv old apache data to /root/deploy/backup/httpd-data into servername.ref.sh
+
+  #write command to mv new apache configs to /etc/httpd.conf
+
+  #write command to mv new apache configs to /var/www/vhosts/modelname
+
+  #write command to start apache
+
+  #write command to cleanup if needed
+
+  #run servername.ref.sh remotely on each server with ssh
+  #example: ssh root@servername 'bash -s' < commandlist.sh
+ 
+  #if the exit code is less then 1 (successful) remove the servername.ref.sh
+
+  #log deployment status for server
+
+ }
 
 function amqp-org_MySQLServer {
   log_string="No deploy work to do for a MySQL Server Profile."

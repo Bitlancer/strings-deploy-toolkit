@@ -185,11 +185,16 @@ function parse_serverlist {
     check_profile "${item[3]}"
     #put some logic now that we have a profile and model to deploy
     eval `echo "$model_name" | tr -d ' '`_`echo "$server_profile" | tr -d ' '` #this launches the .model function
-    
-    
-  done
+    done
 }
 
+function cleanup_local {
+  #cleans all local cache locations
+  log_string="Cleaning up local deploy caches."
+  logger
+  #add logic
+
+}
 
 #Start Logging
 log_string="--------------------------------------------------"
@@ -217,55 +222,9 @@ logger
 
 #set the repo shortname now that we read in variables a req't of deploy.sh GitConf func.
 reposhort=$(basename ${repo%.*})
-check_model #this is in models.case file and sourced at runtime
-#Pull in git repo provided
-../deploy.sh -c -g "$repo" -r "$reposhort" -R $ref
-#wait for it
-wait $!
-if [[ $? -eq 0 ]]
-then
-    log_string="Downloaded git repository."
-    logger
-else
-    log_string="Download of git repository failed."
-    logger
-    exit 5
-fi
-create_tarball
 parse_serverlist
 
-#Download Strings-Deploy-Toolkit from github
-   #Things we need
-     #temp storage spot
-     #credentials or key
-     #repository address
 
-
-#Download Project files from gitrepo provided with deploy
-   #Things we need
-     #temp storage spot
-     #repository address 
-     #credentials or key
-
-#Create a Payload
-   #Things we need
-     #temp storage spots of the strings-deploy-toolkit and application files
-     #place the files together in a project path
-     #tarball up the path
-
-#Build Command List
-  #function build_servers_command
-   #parse server list while loop
-   #write commands to a tempfile  
-     #grab the log file off of the server when done
-     #example: ssh root@servername 'bash -s' < commandlist.sh
-     #/path/to/deploy.sh -f -g <gitrepovar> -l <path to land>
-
-#Execute Commands against Server List
-  #we need to know what the run user will be on the remote systems
-  #run the command list
-  #collect return code and report to log
-    #greater than 0 is error in our case I have specific error codes in deploy.sh that could let us know more.
 
 #Set the internal field separator back to what it was when we started
 IFS=$OFS
