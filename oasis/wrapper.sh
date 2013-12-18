@@ -128,26 +128,6 @@ function role_check {
   esac
 }
 
-
-#to be removed
-#function check_model {
-#  #Checks to see what application we're deploying and takes the proper steps of execution
-#  source ./models.case
-#  case "$model_name" in
-#    "amqp-org") log_string="amqp-org is the model to deploy"
-#                logger
-#                ;;
-#    "oasis-oslc") log_string="oasis-oslc is the model to deploy"
-#                  logger
-#                  ;;
-#    *) log_string="Unknown model specified: $model_name"
-#       logger
-#       exit 1
-#       ;;
-#  esac
-#}
-#end of removed
-
 function check_profile () {
   #Checks to see what profiles we're using and determines what work to do
   server_profile="$1"
@@ -230,7 +210,7 @@ logger
 
 
 echo "The server list is: $server_list"
-check_model
+check_model #this is in models.case file and sourced at runtime
 parse_serverlist
 
 

@@ -42,13 +42,19 @@ dirpath="" #Needs to be set by directory check functions for use with CreateDir 
 dirsuccess=0 #Set by CreateDir function and used for verification in GitConf and SwiftConf.
 gitrepohome=~/deploy/repodata/ #Where working repos live.
 datahome=~/deploy/osdata/ #Where cached openstack swift/cloud files live.
-gitlandinghome="/var/www/html/" #Where you want the data to land if using virtual hosts specify -l and the path on the command line
-oslandinghome="/var/www/html/"
+gitlandinghome="/var/www/vhosts/" #Where you want the data to land if using virtual hosts specify -l and the path on the command line
+oslandinghome="/var/www/vhosts/"
 landinghome="" #used prior to doing DataMove by each pull/clone function
 scriptdebugflag=0
 operationsuccess=0
 operationfail=0
+tararchive="" #file to deploy
+tarextractflag=0 #Gets turned on by getopts
+tarlandinghome="" #where the file should deploy to
+servicename="" #service to restart
+staginghome="" #where to stage the files prior to deployment
 lock="/var/lock/deploy"
+ref="" #reference 
 #Setup Logging
   echo "------------------------------------------------------------------------------------------" >> $log #run separator
   date >> $log
@@ -114,7 +120,13 @@ function script_usage {
   echo "-L <Landing Path> openstack swift landing path. Defaults to /var/www/html/"
   echo 
   echo
-  #error code for bad usage syntax or missing arguments
+  echo "Tar/Tar.gz Usage"
+  echo "  Example:"
+  echo "  deploy.sh -t -a <arg> -S <arg> [ -R <arg> ]"
+  echo "Tar/Tar.gz Related Option flag descriptions:"
+  echo "-a <Archive Path> (required)"
+  echo "-S <Staging Path> (required)"
+  echo "-R <Reference ID>"
 }
 
 
@@ -225,6 +237,7 @@ function GitExistCheck {
      #We could do an install of git here if desired
      log_string="Error: Git is not installed"
      logger
+     rm_lock
      exit 1
   fi
 }
@@ -274,6 +287,7 @@ function GitBranchChange {
       else
           log_string="Branch change failed."
           logger
+          rm_lock
           exit 1
       fi
   else
@@ -347,6 +361,7 @@ function GitLandingHomeCheck {
       #we could choose to just create the path instead
       log_string="landing path does not exist."
       logger
+      rm_lock
       exit 1
   fi
 }
@@ -363,6 +378,7 @@ function OSSwiftLandingHomeCheck {
       #we could choose to just create the path instead
       log_string="landing path does not exist."
       logger
+      rm_lock
       exit 1
   fi
 }
@@ -485,6 +501,7 @@ function GitPull {
       else
           log_string="Error on code pull from remote."
           logger
+          rm_lock
           exit 1
       fi
       #make sure the branch is exactly the same as remote
@@ -497,6 +514,7 @@ function GitPull {
       else
           log_string="Hard reset on local git repository unsuccessful."
           logger
+          rm_lock
           exit 1
       fi
       #Move the code into place
@@ -560,6 +578,7 @@ function OSSwiftExistCheck {
      #We could do an install of git here if desired
      log_string="Error: openstack swift not installed"
      logger
+     rm_lock
      exit 1
   else
      log_string="swift exists: $osswiftversion"
@@ -614,6 +633,7 @@ function OSSwiftDirectoryPull {
                  else
                      log_string="$FILENAME failed to download from swift container $oscontainer"
                      logger
+                     rm_lock
                      exit 1
                  fi
                done
@@ -698,6 +718,7 @@ echo
                  else
                      log_string="$ospath failed to download from swift container $oscontainer"
                      logger
+                     rm_lock
                      exit 1
                  fi
                #Move the data into place
@@ -772,6 +793,7 @@ function OSSwiftPathPullSelector {
        #easter egg
        log_string="Help me I'm stoned....."
        logger
+       rm_lock
        exit 420
    fi
 }
@@ -1002,6 +1024,7 @@ function GitClone {
       else
           log_string="Unable to remove repository data."
           logger
+          rm_lock
           exit 1
       fi
       log_string="git clone process completed successfully."
@@ -1009,6 +1032,7 @@ function GitClone {
   else
       log_string="Missing parameter for Git URL."
       logger
+      rm_lock
       exit 5
   fi
 }
@@ -1089,6 +1113,8 @@ function ConfSelector {
       log_string="Missing arguments to configure a git repository."
       logger
       script_usage
+      rm_lock
+      exit 5
   fi
   #Try to configure Git after all validation has occurred
   GitConf
@@ -1114,9 +1140,92 @@ function rm_lock {
       fi
 }
 
+function ServiceStop () {
+  #Stops the specified service
+  soyvis=$1
+  echo "Trying to stop: $soyvis"
+  if [ -z "$soyvis" ]
+  then
+      log_string="No Service provided to stop."
+      logger
+  else
+      /etc/init.d/$soyvis stop
+      if [[ $? -eq 0 ]]
+      then
+          log_string="Service $soyvis was stopped."
+          logger
+      else
+          log_string="Service $soyvis could not be stopped."
+          logger
+          rm_lock
+          exit 5
+      fi
+  fi
+}
+
+
+function ServiceStart () {
+  #Starts the specified service
+  soyvis=$1
+  echo "Trying to stop: $soyvis"
+  if [ -z "$soyvis" ]
+  then 
+      log_string="No Service provided to start."
+      logger
+  else
+      /etc/init.d/$soyvis start
+      if [[ $? -eq 0 ]]
+      then
+          log_string="Service $soyvis was started."
+          logger
+      else
+          log_string="Service $soyvis could not be started."
+          logger
+          rm_lock
+          exit 5
+      fi
+  fi
+}
+
+function ExtractTarball {
+#Extracts a tarfile 
+  #extract the file to staging
+  if [[ "$staginghome" != "" && "$tararchive" != "" ]]
+  then
+      #Check for Staging Directory to exist
+      if [ ! -d $staginghome$ref ]
+      then
+          #Create Staging Directory to Extract to
+          dirpath="$staginghome""$ref"/
+          CreateDir
+      fi
+      log_string="Extracting Tar."
+      logger
+      tar -xvf $tararchive --directory "$staginghome""$ref"/ 2>&1&>>$log
+      #check the error code
+      if [[ $? -eq 0 ]]
+      then
+          log_string="Extracted Tar successfully."
+          logger
+          operationsuccess=$((operationsuccess + 1))
+      else
+          log_string="Extraction of Tar failed."
+          logger
+          rm_lock
+          exit 5
+          operationfail=$((operationsuccess + 1))
+      fi
+  else
+      script_usage
+      rm_lock
+      exit 5
+  fi
+}
+
+
 #Pulling in options from shell.  Using getopts instead of getopt
 #Capturing options and suppressing getopts errors (leading : in getopts string) for our own error handling
-while getopts ":r:g:A:C:U:K:P:L:b:h:l:vdpcf-:" flag
+while getopts ":r:g:a:s:S:A:C:U:K:P:L:R:b:h:l:vtdpcf-:" flag
   do
     #debugging getopts loop
     if [ $scriptdebugflag -eq 1 ]
@@ -1132,6 +1241,7 @@ while getopts ":r:g:A:C:U:K:P:L:b:h:l:vdpcf-:" flag
        log_string="Option $OPTARG Missing Argument."
        logger
        script_usage
+       rm_lock
        exit 5
     fi
     #Error handling on invalid option
@@ -1140,6 +1250,7 @@ while getopts ":r:g:A:C:U:K:P:L:b:h:l:vdpcf-:" flag
        log_string="Option $OPTARG Not Recognized."
        logger
        script_usage
+       rm_lock
        exit 5
     fi
     #Error handling on missing argument followed by another flag
@@ -1149,6 +1260,7 @@ while getopts ":r:g:A:C:U:K:P:L:b:h:l:vdpcf-:" flag
        log_string="Option $flag Missing Argument."
        logger
        script_usage
+       rm_lock
        exit 5
     fi
     #Handling getopts flags 
@@ -1199,7 +1311,7 @@ while getopts ":r:g:A:C:U:K:P:L:b:h:l:vdpcf-:" flag
 #                  log_verbose=1;OPTIND=$(( $OPTIND + 1 ))
 #             ;;
 #             *) #unknown command
-#                  log_string="Unrecognized long flag or argument";logger;exit 5
+#                  log_string="Unrecognized long flag or argument";logger;rm_lock;exit 5
 #             ;;
 #          esac
 #          ;;
@@ -1211,7 +1323,7 @@ while getopts ":r:g:A:C:U:K:P:L:b:h:l:vdpcf-:" flag
        A) osauthurl=$OPTARG;osauthurlflag=1;;
        P) ospath=$OPTARG;ospathflag=1;;
        L) oslandinghome=$OPTARG;;
-       l) gitlandinghome=$OPTARG;;
+       l) gitlandinghome=$OPTARG;tarlandinghome=$OPTARG;;
        b) gitrepobranch=$OPTARG;gitrepobranchflag=1;;
        h) host=$OPTARG;;
        d) scriptdebugflag=1;echo "Script Debugging specified";echo "Script Debugging specified" >> $log;;
@@ -1219,7 +1331,12 @@ while getopts ":r:g:A:C:U:K:P:L:b:h:l:vdpcf-:" flag
        p) PullSelectorFlag=1;;
        c) ConfSelectorFlag=1;;
        f) gitcloneflag=1;;
-       *) log_string="Unrecognized flag or argument";logger;exit 5;;
+       t) tarextractflag=1;;
+       a) tararchive=$OPTARG;;
+       s) servicename="$OPTARG";;
+       S) staginghome=$OPTARG;;
+       R) ref="$OPTARG";;
+       *) log_string="Unrecognized flag or argument";logger;rm_lock;exit 5;;
     esac
   #Ending getopts capturing and handling
   done
@@ -1247,6 +1364,7 @@ then
     logger
     log_string="You are able to do a Configure and Pull, but not a configure, pull, and clone."
     logger
+    rm_lock
     exit 1
 fi
 
@@ -1274,6 +1392,13 @@ then
     GitClone
 fi
 
+#Try a tarextract fourth
+if [[ $tarextractflag -eq 1 ]] #-z $staginghome && -z $tararchive ]]
+then 
+    #Extract the tar
+    ExtractTarball
+fi
+
 #Check for success and exit with appropriate error code
 if [ $operationfail -gt 0 ]
 then
@@ -1286,7 +1411,7 @@ then
     #exiting with errors
       #remove lock file
       rm_lock
-    exit 1
+      exit 1
 else
     log_string="There were $operationfail failures during the run."
     logger
