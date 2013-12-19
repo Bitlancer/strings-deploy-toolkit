@@ -2,6 +2,7 @@
 
 #variables
 source ./deploy-common.conf #Reads common variables between deploy.sh and wrapper.sh
+source ./custom.conf #Reads custom common variables between deploy.sh and wrapper.sh
 log_verbose=1 		#whether or not to display output on terminal screen
 log=/var/log/bitlancer-wrapper.log #logfile name
 model="" 		#passed from strings

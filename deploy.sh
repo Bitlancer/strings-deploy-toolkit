@@ -3,6 +3,7 @@
 
 #variables
 source ./deploy-common.conf #Reads common variables between deploy.sh and wrapper.sh 
+source ./custom.conf #Reads custom common variables between deploy.sh and wrapper.sh
 log="/var/log/bitlancer-deploy.log" #log path
 host="" #used for deploying to a host or many hosts
 gitrepo="" #git repostitory specified by user at runtime
