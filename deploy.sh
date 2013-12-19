@@ -599,26 +599,26 @@ function OSSwiftDirectoryPull {
          then
              #Make a directory to match the container name, we'll use the CreateDir function for validation
              #Set the variables for function use
-             dirpath="$datahome$oscontainer"
+             dirpath="$datahome$ref/$oscontainer"
              log_string="Attempting to create directory $dirpath"
              logger
              CreateDir
              #Change to the container directory
-             cd $datahome$oscontainer
+             cd $datahome$ref/$oscontainer
              #Complete the container pull
              log_string="Performing a pull of openstack swift container $oscontainer path $ospath"
              logger
              #list the contents into a file
-             swift -A $osauthurl -U $osuser -K $oskey list $oscontainer -p $ospath > "$datahome$oscontainer/osmanifest.lst"
+             swift -A $osauthurl -U $osuser -K $oskey list $oscontainer -p $ospath > "$datahome$ref/oscontainer/osmanifest.lst"
              #do while reading in the osmanifest.lst file names pull down the filename
              log_string="Swift Directory Downloader:"
              logger
              #read the manifest.lst to figure out what to download from the folder
-             cat "$datahome$oscontainer/osmanifest.lst" | while read FILENAME 
+             cat "$datahome$ref/$oscontainer/osmanifest.lst" | while read FILENAME 
                do
                  log_string="Attempting openstack swift download of: $FILENAME"
                  logger
-                 swift -A $osauthurl -U $osuser -K $oskey download $oscontainer "$FILENAME" 2>&1&>>$log
+                 swift -A $osauthurl -U $osuser -K $oskey download $datahome$ref/$oscontainer "$FILENAME" 2>&1&>>$log
                  #Check if the download happened properly
                  if [ $? -eq 0 ]
                  then
@@ -631,25 +631,26 @@ function OSSwiftDirectoryPull {
                      exit 1
                  fi
                done
-             #Move the data into place
-               #Set the landinghome to openstack landing home specified
-               landinghome=${oslandinghome}
-               log_string="Landing home set to $landinghome."
-               logger
-               dirpath="$datahome$oscontainer/"
-               log_string="Attempting to move data from $dirpath"
-               logger
-               DataMove
+#deprecating
+#             #Move the data into place
+#               #Set the landinghome to openstack landing home specified
+#               landinghome=${oslandinghome}
+#               log_string="Landing home set to $landinghome."
+#               logger
+#               dirpath="$datahome$oscontainer/"
+#               log_string="Attempting to move data from $dirpath"
+#               logger
+#               DataMove
              #Cleanup
-             rm -f $landinghome/osmanifest.lst
              log_string="Cleaning up temporary files/directories."
              logger
+             rm -f $datahome$ref/$oscontainer/osmanifest.lst
              cd $datahome
              log_string="Current Directory:"
              logger
-             log_string="$(pwd)"
-             logger
-             rm -rf $datahome$oscontainer 2>&1&>>$log
+#             log_string="$(pwd)"
+#             logger
+#             rm -rf $datahome$oscontainer 2>&1&>>$log
          else
              log_string="No valid openstack swift container file to pull."
              logger
@@ -686,24 +687,24 @@ echo
          then
              #Make a directory to match the container name, we'll use the CreateDir function for validation
              #Set the variables for function use
-             dirpath="$datahome$oscontainer"
+             dirpath="$datahome$ref/oscontainer"
              log_string="Attempting to create directory $dirpath"
              logger
              CreateDir
              #Change to the container directory
-             cd $datahome$oscontainer
+             cd $datahome$ref/$oscontainer
              #Complete the container pull
              log_string="Performing a pull of openstack swift container $oscontainer path $ospath"
              logger
              #list the file to see if it exists
-             swift -A $osauthurl -U $osuser -K $oskey list $oscontainer -p $ospath > "$datahome$oscontainer/osmanifest.lst"
+             swift -A $osauthurl -U $osuser -K $oskey list $oscontainer -p $ospath > "$datahome$ref/$oscontainer/osmanifest.lst"
              if [ $? -eq 0 ]
              then
                  log_string="Swift File Downloader:"
                  logger
                  log_string="Attempting openstack swift download of: $ospath"
                  logger
-                 swift -A $osauthurl -U $osuser -K $oskey download $oscontainer "$ospath" 2>&1&>>$log
+                 swift -A $osauthurl -U $osuser -K $oskey download $datahome$ref/$oscontainer "$ospath" 2>&1&>>$log
                  #Check if the download happened properly
                  if [ $? -eq 0 ]
                  then
@@ -716,24 +717,25 @@ echo
                      exit 1
                  fi
                #Move the data into place
-               #Set the landinghome to openstack landing home specified
-               landinghome=${oslandinghome}
-               log_string="Landing home set to $landinghome."
-               logger
-               dirpath="$datahome$oscontainer/"
-               log_string="Attempting to move data from $dirpath"
-               logger
-               DataMove
+#deprecating
+#               #Set the landinghome to openstack landing home specified
+#               landinghome=${oslandinghome}
+#               log_string="Landing home set to $landinghome."
+#               logger
+#               dirpath="$datahome$oscontainer/"
+#               log_string="Attempting to move data from $dirpath"
+#               logger
+#               DataMove
              #Cleanup
-             rm -f $landinghome/osmanifest.lst
              log_string="Cleaning up temporary files/directories."
              logger
-             cd $datahome
-             log_string="Current Directory:"
-             logger
-             log_string="$(pwd)"
-             logger
-             rm -rf $datahome$oscontainer 2>&1&>>$log
+             rm -f $datahome$ref/$oscontainer/osmanifest.lst
+#             cd $datahome
+#             log_string="Current Directory:"
+#             logger
+#             log_string="$(pwd)"
+#             logger
+#             rm -rf $datahome$oscontainer 2>&1&>>$log
              fi
          else
              log_string="No valid openstack swift container file to pull."
@@ -814,37 +816,37 @@ function OSSwiftContainerPull {
          then
              #Make a directory to match the container name, we'll use the CreateDir function for validation
              #Set the variables for function use
-             dirpath="$datahome$oscontainer"
+             dirpath="$datahome$ref/$oscontainer"
              log_string="Attempting to create directory $dirpath"
              logger
              CreateDir
              #Change to the container directory
-             cd $datahome$oscontainer
+             cd $datahome$ref/$oscontainer
              #Complete the container pull
              log_string="Swift Download:"
              logger
-             swift -A $osauthurl -U $osuser -K $oskey download $oscontainer 2>&1&>>$log
+             swift -A $osauthurl -U $osuser -K $oskey download $datahome$ref/$oscontainer 2>&1&>>$log
              #wait for it
              wait $!
-             #Move the data into place
-               #Set the landinghome to openstack landing home specified
-               landinghome=${oslandinghome}
-               log_string="Landing home set to $landinghome."
-               logger
-               dirpath="$datahome$oscontainer"
-               log_string="Attempting to move data from $dirpath"
-               logger
-               DataMove
-             #Cleanup
-             log_string="Cleaning up temporary files/directories."
-             logger
-             cd $datahome
-             log_string="Current Directory:"
-             logger
-             log_string="$(pwd)"
-             logger
-             rm -rf $datahome$oscontainer 2>&1&>>$log
-             
+#deprecating
+#             #Move the data into place
+#               #Set the landinghome to openstack landing home specified
+#               landinghome=${oslandinghome}
+#               log_string="Landing home set to $landinghome."
+#               logger
+#               dirpath="$datahome$oscontainer"
+#               log_string="Attempting to move data from $dirpath"
+#               logger
+#               DataMove
+#             #Cleanup
+#             log_string="Cleaning up temporary files/directories."
+#             logger
+#             cd $datahome
+#             log_string="Current Directory:"
+#             logger
+#             log_string="$(pwd)"
+#             logger
+#             rm -rf $datahome$oscontainer 2>&1&>>$log
          else
              log_string="No valid openstack swift container to pull."
              logger

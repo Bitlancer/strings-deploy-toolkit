@@ -29,26 +29,96 @@ function amqp-org_ApacheWebServer {
   fi
 
   #Check to see if we need to pull in the apache configs from config repo
-  #if
-  #then
-  #else
-  #fi
+  if [[ -d $gitrepohome$ref/$config_reposhort ]]
+  then
+      log_string="Config Repo exists, skipping clone."
+      logger
+  else
+      log_string="Config Repo does not exist, cloning for deployment."
+      logger
+      #Pull in git repo provided
+      ../deploy.sh -c -g "$config_repo" -r "$config_reposhort" -R $ref
+      #wait for it
+      wait $!
+      if [[ $? -eq 0 ]]
+      then
+          log_string="Downloaded git repository."
+          logger
+      else
+          log_string="Download of git repository failed."
+          logger
+          exit 5
+      fi
+  fi
 
   #Check to see if we need to pull in the cloudfiles data
   #if
   #then
   #else
   #fi
-  
-  #Put the data together for packaging
-  #mv stuff
-  
+ 
   #Check if the tarball is there already
-  #if
-  #then
-  #else
-    #create_tarball
-  #fi
+  if [[ -e $packagehome$ref/$model_name.tar.gz ]]
+  then
+      log_string="Tar file already exists."
+      logger
+  else
+      #Put the data together for packaging
+      if [[ -d $staginghome$ref/$model_name ]]
+      then
+          log_string="Staging path exists."
+          logger
+      else
+          dirpath=$staginghome$ref/$model_name
+          log_string="Creating Staging Directory."
+          logger
+          CreateDir
+      fi
+          #move stuff
+            #move gitdata
+              if [[ -d $gitrepohome$ref/$reposhort ]]
+              then
+                  log_string="Staging repo"
+                  logger
+                  rsync -a $gitrepohome$ref/$reposhort/ $staginghome$ref/$model_name 2>&1&>>$log
+              else
+                  log_string="repo data missing to stage, skipping move."
+                  logger
+              fi
+            #move osdata
+              if [[ -d $datahome$ref/$oscontainer ]]
+              then
+                  log_string="Staging OSSwift Data."
+                  logger
+                  rsync -a $datahome$ref/$oscontainer $staginghome$ref/$model_name 2>&1&>>$log
+              else
+                  log_string="OSSwift data missing to stage, skipping move."
+                  logger
+              fi
+            #move proper apache configs
+              if [[ -d $gitrepohome$ref/$config_reposhort/apache/$model_name ]]
+              then
+                  log_string="Staging apache configs"
+                  logger
+                  rsync -a $gitrepohome$ref/$config_reposhort/apache/$model_name $staginghome$ref/$model_name-config 2>&1&>>$log
+              else
+                  log_string="Config repo data missing to stage, skipping move."
+                  logger
+              fi
+          #package it up
+            if [[ -d $packagehome$ref ]]
+            then
+                log_string="Packaged home already exists."
+                logger
+            else
+                #make sure packaged home exists
+                dirpath=$packagehome$ref
+                CreateDir
+            fi
+          #set directory to compress
+          tarpath="$staginghome$ref/"
+          create_tarball
+  fi
   
   #scp it to the server
   #scp

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+
+
 #variables
 source ./deploy-common.conf #Reads common variables between deploy.sh and wrapper.sh
 source ./custom.conf #Reads custom common variables between deploy.sh and wrapper.sh
@@ -14,14 +16,18 @@ server_role=""		#used in building command list
 server_profile=""       #used in building command list
 cloud_files_credentials="" #passed from Strings
 repo="" 		#passed from Strings
-reposhort=""$(basename ${repo%.*})
+reposhort=""		#later derived from repo
+config_reposhort=""	#later derived from deploy-common.conf configrepo
 ref="" 			#passed from Strings
 validate_count=0 	#Used for validating switches
 validate_string=""	#Used for validation switches
 validate_param="" 	#Used for obtaining valid switches parameters
 validate_success=0 	#Switch to check status of switch validity
 validate_var="" 	#variable to set in script from Strings variables
-OFS=$(echo $IFS)
+OFS=$(echo $IFS)	#Original file separator (internal var.) Using to reset later
+dirpath=""         	#Used for setting a path to use with CreateDir
+tarpath=""		#Used for reading what file(s) to tar up for deployment
+lock="/var/lock/deploy"	#Used to prevent multiple runs
 
 #sourcing our models
 source ./*.model #functions that build an application model
@@ -46,6 +52,30 @@ function logger {
      #clear log_string for next instantiation
      log_string=""
   fi
+}
+
+function chk_running {
+  if [[ -f $lock ]]
+    then
+        log_string="Error: Script is already running."
+        logger
+        log_string="Time of Error: `date`"
+        logger
+        exit 5
+  fi
+}
+
+function rm_lock {
+ #remove lock file
+      rm -f $lock
+      if [[ $? -eq 0 ]]
+      then
+          log_string="Lock file removed successfully."
+          logger
+      else
+          log_string="Lock file was unable to be removed."
+          logger
+      fi
 }
 
 function get_parameter {
@@ -117,6 +147,22 @@ function validate_input {
   #fi   
 }
 
+function CreateDir {
+  #creates a new directory and verifies.
+  log_string="Creating missing directory."
+  logger
+  mkdir -p $dirpath 2>&1&>>$log
+  if [ $? -eq 0 ]
+  then
+      log_string="Directory created."
+      logger
+      dirsuccess=1
+  else
+      log_string="Directory failed to be created.  Check directory permissions."
+      logger
+      dirsuccess=0
+  fi
+}
 
 function role_check {
   #Checks to see what role we're using and determines what work to do
@@ -146,17 +192,17 @@ function check_profile () {
                     ;;
     *) log_string="Unrecognized Server Profile Name specified: $server_profile"
        logger
+       rm_lock
        exit 1 
          ;;
   esac
 }
 
 function create_tarball {
-  #packages our repository and data for deployment
-  
-    #if repo switch and cloudfiles we need to combine and then tar
-    
-    tar -zcvf $gitrepohome$ref/$model_name.tar.gz $gitrepohome$ref/$reposhort
+#packages our repository and data for deployment
+  dirpath=$packagehome
+  CreateDir
+  tar -zcvf "$packagehome$ref/$model_name.tar.gz" "$tarpath"
 }
 
 function parse_serverlist {
@@ -204,6 +250,12 @@ echo >> $log
 log_string="Work Received on: `date`"
 logger
 
+#see if the script is already running
+chk_running
+
+#Not running so create the lock File
+date > $lock
+
 #Read in Variables from Strings
   #12 possible parameters
   while [ $validate_count -lt 11 ]; do
@@ -223,6 +275,7 @@ logger
 
 #set the repo shortname now that we read in variables a req't of deploy.sh GitConf func.
 reposhort=$(basename ${repo%.*})
+config_reposhort=$(basename ${config_repo%.*})
 parse_serverlist
 
 
@@ -232,4 +285,5 @@ IFS=$OFS
 echo "Set internal field separator back to: $IFS"
 
 #Exit Clean
+rm_lock
 exit 0
