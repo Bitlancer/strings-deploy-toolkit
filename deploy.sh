@@ -49,7 +49,7 @@ tararchive="" #file to deploy
 tarextractflag=0 #Gets turned on by getopts
 tarlandinghome="" #where the file should deploy to
 servicename="" #service to restart
-lock="/var/lock/deploy"
+deploylock="/var/lock/bitlancer-deploy.lck"
 ref="" #reference 
 #Setup Logging
   echo "------------------------------------------------------------------------------------------" >> $log #run separator
@@ -215,7 +215,7 @@ function script_debug {
 
 
 function chk_running {
-  if [[ -f $lock ]]
+  if [[ -f $deploylock ]]
     then
         log_string="Error: Script is already running."
 	logger
@@ -828,25 +828,6 @@ function OSSwiftContainerPull {
              swift -A $osauthurl -U $osuser -K $oskey download $datahome$ref/$oscontainer 2>&1&>>$log
              #wait for it
              wait $!
-#deprecating
-#             #Move the data into place
-#               #Set the landinghome to openstack landing home specified
-#               landinghome=${oslandinghome}
-#               log_string="Landing home set to $landinghome."
-#               logger
-#               dirpath="$datahome$oscontainer"
-#               log_string="Attempting to move data from $dirpath"
-#               logger
-#               DataMove
-#             #Cleanup
-#             log_string="Cleaning up temporary files/directories."
-#             logger
-#             cd $datahome
-#             log_string="Current Directory:"
-#             logger
-#             log_string="$(pwd)"
-#             logger
-#             rm -rf $datahome$oscontainer 2>&1&>>$log
          else
              log_string="No valid openstack swift container to pull."
              logger
@@ -1130,7 +1111,7 @@ function ConfSelector {
 
 function rm_lock {
  #remove lock file
-      rm -f $lock
+      rm -f $deploylock
       if [[ $? -eq 0 ]]
       then
           log_string="Lock file removed successfully."
@@ -1223,99 +1204,20 @@ function ExtractTarball {
   fi
 }
 
+if [[ $@ = "" ]]
+then 
+    log_string="No options specified."
+    logger
+    rm_lock
+    exit 5
+else 
 
+#do getopts
 #Pulling in options from shell.  Using getopts instead of getopt
 #Capturing options and suppressing getopts errors (leading : in getopts string) for our own error handling
-while getopts ":r:g:a:s:R:S:A:C:U:K:P:L:b:h:l:vtdpcf-:" flag
-  do
-    #debugging getopts loop
-    if [ $scriptdebugflag -eq 1 ]
-    then
-        log_string="getopts loop settings:"
-        logger
-#        log_string=$(echo "flag="$flag" OPTIND="$OPTIND" OPTARG="$OPTARG"")
-        logger
-    fi
-    #Error handling on missing arguments
-    if [ $flag = : ]
-    then
-       log_string="Option $OPTARG Missing Argument."
-       logger
-       script_usage
-       rm_lock
-       exit 5
-    fi
-    #Error handling on invalid option
-    if [ $flag = ? ]
-    then
-       log_string="Option $OPTARG Not Recognized."
-       logger
-       script_usage
-       rm_lock
-       exit 5
-    fi
-    #Error handling on missing argument followed by another flag
-    #Example deploy.sh -r -b, -b will be picked up as -r's argument.  This will handle it and notify the user.
-    if [[ $OPTARG = -* ]]
-    then
-       log_string="Option $flag Missing Argument."
-       logger
-       script_usage
-       rm_lock
-       exit 5
-    fi
+while getopts ":r:g:a:s:R:S:A:C:U:K:P:L:b:h:l:vtdpcf" flag;  do
     #Handling getopts flags 
     case $flag in
-# "--long-type" options I don't have stable yet
-#       -)#parsing long option names
-#          case $OPTARG in
-#             config) #Configures a git repo locally to be able to later only pull in changes.
-#                  ConfSelectorFlag=1;OPTIND=$(( $OPTIND + 1 ))
-#             ;;
-#             pull) #Pulls data based on variables fed.
-#                  PullSelectorFlag=1;OPTIND=$(( $OPTIND + 1 ))
-#             ;;
-#             clone) #Completes a temporary git clone moves the code into place and then deletes the directory created.
-#                  gitcloneflag=1;OPTIND=$(( $OPTIND + 1 ))
-#             ;;
-#             project) #same as a git remote shortname
-#                  gitrepo="${!OPTIND}";gitrepoflag=1;OPTIND=$(( $OPTIND + 1 ))
-#             ;;
-#             shortname) #same as a git project name
-#                  gitrepo="${!OPTIND}";gitrepoflag=1#;OPTIND=$(( $OPTIND + 1 ))
-#             ;;
-#             branch) #git branch name to deploy.
-#                  gitrepobranch="${OPTIND}";gitrepobranchflag=1;OPTIND=$(( $OPTIND + 1 ))
-#             ;;
-#             url) #git URL to a repository.  may be ssh or https style
-#                  giturl="${!OPTIND}";giturlflag=1;OPTIND=$(( $OPTIND + 1 ));script_debug
-#             ;;
-#             container)#openstack swift container
-#                  OPTIND=$(( $OPTIND + 1 ))
-#             ;;
-#             osauthurl)#openstack authentication URL
-#                  OPTIND=$(( $OPTIND + 1 ))
-#             ;;
-#             osuser)#openstack user
-#                  OPTIND=$(( $OPTIND + 1 ))
-#             ;;
-#             oskey)#openstack api key
-#                  OPTIND=$(( $OPTIND + 1 ))
-#             ;;
-#             ospath)#openstack path to directory or file -- requirement of a container variable as well
-#                  OPTIND=$(( $OPTIND + 1 ))
-#             ;;
-#             debug)#spits debugging into log
-#                  scriptdebugflag=1;OPTIND=$(( $OPTIND + 1 ))
-#             ;;
-#             verbose)#directs echo output to console
-#                  log_verbose=1;OPTIND=$(( $OPTIND + 1 ))
-#             ;;
-#             *) #unknown command
-#                  log_string="Unrecognized long flag or argument";logger;rm_lock;exit 5
-#             ;;
-#          esac
-#          ;;
        r) gitrepo=$OPTARG;gitrepoflag=1;;
        g) giturl=$OPTARG;giturlflag=1;;
        C) oscontainer=$OPTARG;oscontainerflag=1;;
@@ -1327,8 +1229,8 @@ while getopts ":r:g:a:s:R:S:A:C:U:K:P:L:b:h:l:vtdpcf-:" flag
        l) gitlandinghome=$OPTARG;tarlandinghome=$OPTARG;;
        b) gitrepobranch=$OPTARG;gitrepobranchflag=1;;
        h) host=$OPTARG;;
-       d) scriptdebugflag=1;echo "Script Debugging specified";echo "Script Debugging specified" >> $log;;
-       v) log_verbose=1;echo "Verbose Logging specified";echo "Verbose Logging specified" >> $log;;
+       d) scriptdebugflag=1;log_string="Script Debugging specified";logger;;
+       v) log_verbose=1;log_string="Verbose Logging specified";logger;;
        p) PullSelectorFlag=1;;
        c) ConfSelectorFlag=1;;
        f) gitcloneflag=1;;
@@ -1337,11 +1239,12 @@ while getopts ":r:g:a:s:R:S:A:C:U:K:P:L:b:h:l:vtdpcf-:" flag
        s) servicename="$OPTARG";;
        S) staginghome=$OPTARG;;
        R) ref="$OPTARG";;
-       *) log_string="Unrecognized flag or argument";logger;rm_lock;exit 5;;
+       :) log_string="Missing option argument for -$OPTARG";logger;rm_lock;exit 5;;
+       ?) log_string="Unknown option";logger;rm_lock;exit 5;;
+       *) log_string="Unknown argument";logger;rm_lock;exit 5;;
     esac
-  #Ending getopts capturing and handling
   done
-
+fi
     #Test Example Handling multiple hosts
     for hosts in $host;
     do
@@ -1355,7 +1258,7 @@ while getopts ":r:g:a:s:R:S:A:C:U:K:P:L:b:h:l:vtdpcf-:" flag
 chk_running
 
 #Not running so create the lock File
-date > $lock
+date > $deploylock
 
 
 #Check for multiple pull/clone type options and exit if so.

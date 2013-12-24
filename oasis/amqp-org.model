@@ -119,9 +119,35 @@ function amqp-org_ApacheWebServer {
           tarpath="$staginghome$ref/"
           create_tarball
   fi
-  
-  #scp it to the server
-  #scp
+ 
+  #prepare path on remote server
+  log_string="Attempting to create remote deploy directory $deployroot/$ref on $server_hostname"
+  logger
+  ssh root@$server_hostname mkdir -p $deployroot/$ref 2>&1&>>$log
+  if [[ $? -eq 0 ]]
+  then 
+      log_string="Remote path created on $server_hostname"
+      logger
+      #scp it to the server
+      log_string="Attempting to transfer deployment package to $server_hostname"
+      logger
+      scp $packagehome$ref/$model_name.tar.gz root@$server_hostname:"$deployroot"/"$ref"/$model_name.tar.gz 2>&1&>>$log
+      if [[ $? -eq 0 ]]
+      then 
+          log_string="Package transferred successfully to $server_hostname."
+          logger
+      else
+          log_string="Package transfer failed to $server_hostname."
+          logger
+          rm_lock
+          exit 5
+      fi
+  else
+      log_string="Failed to create remote path on $server_hostname"
+      logger
+      rm_lock
+      exit 5
+  fi
   
   #write deploy.sh untar command into servername.ref.sh
 
@@ -133,13 +159,13 @@ function amqp-org_ApacheWebServer {
 
   #write command to mv old apache data to /root/deploy/backup/httpd-data into servername.ref.sh
 
-  #write command to mv new apache configs to /etc/httpd.conf
+  #write command to mv new apache configs to /etc/httpd.conf into servername.ref.sh
 
-  #write command to mv new apache configs to /var/www/vhosts/modelname
+  #write command to mv new apache configs to /var/www/vhosts/modelname into servername.ref.sh
 
-  #write command to start apache
+  #write command to start apache into servername.ref.sh
 
-  #write command to cleanup if needed
+  #write command to cleanup if needed into servername.ref.sh
 
   #run servername.ref.sh remotely on each server with ssh
   #example: ssh root@servername 'bash -s' < commandlist.sh

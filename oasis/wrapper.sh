@@ -27,7 +27,7 @@ validate_var="" 	#variable to set in script from Strings variables
 OFS=$(echo $IFS)	#Original file separator (internal var.) Using to reset later
 dirpath=""         	#Used for setting a path to use with CreateDir
 tarpath=""		#Used for reading what file(s) to tar up for deployment
-lock="/var/lock/deploy"	#Used to prevent multiple runs
+wraplock="/var/lock/bitlancer-wrapper.lck"	#Used to prevent multiple runs
 
 #sourcing our models
 source ./*.model #functions that build an application model
@@ -55,7 +55,7 @@ function logger {
 }
 
 function chk_running {
-  if [[ -f $lock ]]
+  if [[ -f $wraplock ]]
     then
         log_string="Error: Script is already running."
         logger
@@ -67,7 +67,7 @@ function chk_running {
 
 function rm_lock {
  #remove lock file
-      rm -f $lock
+      rm -f $wraplock
       if [[ $? -eq 0 ]]
       then
           log_string="Lock file removed successfully."
@@ -176,6 +176,7 @@ function role_check {
   esac
 }
 
+#may move this out to a file to keep modular, but not sure yet
 function check_profile () {
   #Checks to see what profiles we're using and determines what work to do
   server_profile="$1"
@@ -202,7 +203,20 @@ function create_tarball {
 #packages our repository and data for deployment
   dirpath=$packagehome
   CreateDir
-  tar -zcvf "$packagehome$ref/$model_name.tar.gz" "$tarpath"
+  present=`pwd` #moving around to create clean tars will ref on success of tar create
+  cd "$tarpath" && tar -zcvf "$packagehome$ref/$model_name.tar.gz" .*
+
+  if [[ $? -eq 0 ]]
+  then
+      log_string="Created deployment"
+      logger
+      cd "$present" #moving back to previous path due to success
+  else
+      log_string="Unable to create tar deployment."
+      logger
+      rm_lock
+      exit 5
+  fi
 }
 
 function parse_serverlist {
@@ -219,8 +233,12 @@ function parse_serverlist {
     logger
     log_string="${item[0]}"  #hostname
     logger
+    #Set curent hostname
+    server_hostname="${item[0]}"
     log_string="${item[1]}"  #role
     logger
+    #Set current role
+    server_role="${item[1]}"
     log_string="${item[2]}"  #profile 1
     logger
     log_string="${item[3]}"  #profile 2
@@ -254,7 +272,7 @@ logger
 chk_running
 
 #Not running so create the lock File
-date > $lock
+date > $wraplock
 
 #Read in Variables from Strings
   #12 possible parameters
