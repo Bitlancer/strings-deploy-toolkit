@@ -204,7 +204,7 @@ function create_tarball {
   dirpath=$packagehome
   CreateDir
   present=`pwd` #moving around to create clean tars will ref on success of tar create
-  cd "$tarpath" && tar -zcvf "$packagehome$ref/$model_name.tar.gz" .*
+  cd "$tarpath" && tar -zcvf "$packagehome$ref/$model_name.tar.gz" *
 
   if [[ $? -eq 0 ]]
   then
