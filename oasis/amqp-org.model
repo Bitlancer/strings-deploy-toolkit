@@ -1,5 +1,22 @@
 #"amqp-org" model file
 
+function grab_remote_log {
+#Used to collect logs from remote deployments
+  log_string="Grabbing Remote log"
+  logger
+  if [[ -d $remote_logs$ref ]]
+  then
+      log_string="Remote Log Path exists."
+      logger
+  else
+      log_string="Creating Remote Log Path collection."
+      logger
+      mkdir -p $remote_logs$ref
+  fi
+  scp root@$server_hostname:/var/log/bitlancer-wrapper-$server_hostname.log $remote_logs/$ref/
+}
+
+
 function amqp-org_ApacheWebServer {
   #steps to deploy a amqp-org web server
   log_string="Deploying amqp-org Apache Web Server"
@@ -150,76 +167,119 @@ function amqp-org_ApacheWebServer {
   fi
   #begin building remote script
   echo "#!/bin/bash" > $server_hostname.$ref.sh
+  #Add logging to the remote script
+  remote_log=/var/log/bitlancer-wrapper-$server_hostname.log
+  echo "function remote_logger {" >> $server_hostname.$ref.sh
+  echo "  if [ $log_verbose -eq 1 ]" >> $server_hostname.$ref.sh
+  echo "  then" >> $server_hostname.$ref.sh
+  echo "       echo \$remote_log_string >> $remote_log" >> $server_hostname.$ref.sh
+  echo "       echo \$remote_log_string" >> $server_hostname.$ref.sh
+  echo "       remote_log_string=\"\"" >> $server_hostname.$ref.sh
+  echo "  else" >> $server_hostname.$ref.sh
+  echo "      echo \$remote_log_string >> $remote_log" >> $server_hostname.$ref.sh
+  echo "      remote_log_string=\"\"" >> $server_hostname.$ref.sh
+  echo "  fi" >> $server_hostname.$ref.sh
+  echo "}" >> $server_hostname.$ref.sh
+  #initialize remote log
+  echo "date > $remote_log" >> $server_hostname.$ref.sh
   #write deploy.sh untar command into servername.ref.sh
-  echo "cd $deployroot/$ref && tar -xvf $deployroot/$ref/$model_name.tar.gz >> $log" >> $server_hostname.$ref.sh
+  echo "cd $deployroot/$ref && tar -xvf $deployroot/$ref/$model_name.tar.gz >> $remote_log" >> $server_hostname.$ref.sh
 
   #write command to stop apache into servername.ref.sh
   echo "/etc/init.d/httpd stop" >> $server_hostname.$ref.sh
  #write command to mv old apache config to /root/deploy/ref/backup/httpd.conf into servername.ref.sh
   echo "if [[ -d $deployroot/$ref/backup/conf ]]" >> $server_hostname.$ref.sh
   echo "then" >> $server_hostname.$ref.sh
-  echo "    log_string=\"Backup path exists\"" >> $server_hostname.$ref.sh
-  echo "    logger" >> $server_hostname.$ref.sh
+  echo "    remote_log_string=\"Apache Conf Backup path exists\"" >> $server_hostname.$ref.sh
+  echo "    remote_logger" >> $server_hostname.$ref.sh
   echo "else" >> $server_hostname.$ref.sh
   echo "    mkdir -p $deployroot/$ref/backup/conf" >> $server_hostname.$ref.sh
   echo "fi" >> $server_hostname.$ref.sh
-  echo "log_string=\"Backing up old apache confs\"" >> $server_hostname.$ref.sh
-  echo "logger" >> $server_hostname.$ref.sh
+  echo "remote_log_string=\"Backing up old apache confs\"" >> $server_hostname.$ref.sh
+  echo "remote_logger" >> $server_hostname.$ref.sh
   echo "mv /etc/httpd/conf.d/*.conf $deployroot/$ref/backup/conf/" >> $server_hostname.$ref.sh
 
 #write command to mv new apache configs to /etc/httpd.conf into servername.ref.sh
+echo "remote_log_string=\"Moving in new apache configs\"" >>  $server_hostname.$ref.sh
+echo "remote_logger" >> $server_hostname.$ref.sh
 echo "mv $deployroot/$ref/$model_name-config/$model_name/*.conf /etc/httpd/conf.d/" >> $server_hostname.$ref.sh
 
   #write command to test apache configs into servername.ref.sh
-  echo "   apachectl -t  >> $log" >> $server_hostname.$ref.sh
+  #made this a function to be able to test without checking confs i.e. 1 line change
+  echo "function check_conf {" >> $server_hostname.$ref.sh
+  echo "   apachectl -t  >> $remote_log" >> $server_hostname.$ref.sh
   echo "  if [[ \$? -eq 0 ]]" >> $server_hostname.$ref.sh
   echo "  then" >> $server_hostname.$ref.sh
-  echo "      log_string=\"Config looks good\"" >> $server_hostname.$ref.sh
-  echo "      logger" >> $server_hostname.$ref.sh
+  echo "      remote_log_string=\"Config looks good\"" >> $server_hostname.$ref.sh
+  echo "      remote_logger" >> $server_hostname.$ref.sh
   echo "  else" >> $server_hostname.$ref.sh
-  echo "      echo \"Reverting Config\"" >> $server_hostname.$ref.sh
-  echo "      log_string=\"Bad config file\"" >> $server_hostname.$ref.sh
-  echo "      logger" >> $server_hostname.$ref.sh
+  echo "      remote_log_string=\"Reverting, bad config file\"" >> $server_hostname.$ref.sh
+  echo "      remote_logger" >> $server_hostname.$ref.sh
   echo "      mv /etc/httpd/conf.d/*.conf $deployroot/$ref/$model_name-config/$model_name/" >> $server_hostname.$ref.sh
   echo "      mv $deployroot/$ref/backup/conf/*.conf /etc/httpd/conf.d/" >> $server_hostname.$ref.sh
   echo "      /etc/init.d/httpd start" >> $server_hostname.$ref.sh
   echo "      exit 5" >> $server_hostname.$ref.sh
   echo "  fi" >> $server_hostname.$ref.sh
- # echo "done" >> $server_hostname.$ref.sh
-  #write command to stop apache into servername.ref.sh
-#  echo "/etc/init.d/httpd stop" >> $server_hostname.$ref.sh
+  echo "}" >> $server_hostname.$ref.sh
 
-  #write command to mv old apache data to /root/deploy/backup/httpd-data into servername.ref.sh
-  echo "if [[ -d $deployroot/$ref/backup/httpd ]]" >> $server_hostname.$ref.sh
-  echo "then" >> $server_hostname.$ref.sh
-  echo "    log_string=\"Backup path exists\"" >> $server_hostname.$ref.sh
-  echo "    logger" >> $server_hostname.$ref.sh
-  echo "else" >> $server_hostname.$ref.sh
-  echo "    mkdir -p $deployroot/$ref/backup/httpd" >> $server_hostname.$ref.sh
-  echo "fi" >> $server_hostname.$ref.sh
-  echo "log_string=\"Moving apache data to backup\"" >> $server_hostname.$ref.sh
-  echo "logger" >> $server_hostname.$ref.sh
-  echo "mv /var/www/vhosts/$model_name $deployroot/$ref/backup/httpd/" >> $server_hostname.$ref.sh
 
-  #write command to mv new apache configs to /var/www/vhosts/modelname into servername.ref.sh
+#  echo "check_conf" >> $server_hostname.$ref.sh
+#backup apache data
+echo "if [[ -d /var/www/vhosts/$model_name ]]" >> $server_hostname.$ref.sh
+echo "then" >> $server_hostname.$ref.sh
+#write command to mv old apache data to /root/deploy/backup/httpd-data into servername.ref.sh
+  echo "    if [[ -d $deployroot/$ref/backup/httpd ]]" >> $server_hostname.$ref.sh
+  echo "    then" >> $server_hostname.$ref.sh
+  echo "        remote_log_string=\"Apache Data Backup path exists\"" >> $server_hostname.$ref.sh
+  echo "        remote_logger" >> $server_hostname.$ref.sh
+  echo "    else" >> $server_hostname.$ref.sh
+  echo "        mkdir -p $deployroot/$ref/backup/http-data" >> $server_hostname.$ref.sh
+  echo "    fi" >> $server_hostname.$ref.sh
+  echo "    remote_log_string=\"Moving apache data to backup\"" >> $server_hostname.$ref.sh
+  echo "    remote_logger" >> $server_hostname.$ref.sh
+  echo "    mv /var/www/vhosts/$model_name $deployroot/$ref/backup/http-data/$model_name" >> $server_hostname.$ref.sh
+echo "else" >> $server_hostname.$ref.sh
+echo "    remote_log_string=\"No Apache Data to backup.\"" >> $server_hostname.$ref.sh
+echo "    remote_logger" >> $server_hostname.$ref.sh
+echo "fi" >> $server_hostname.$ref.sh
+#check that we backed up and then move in new data
+
 
   #write command to start apache into servername.ref.sh
-
+  echo "remote_log_string=\"Starting httpd\"" >> $server_hostname.$ref.sh
+  echo "remote_logger" >> $server_hostname.$ref.sh
+  echo "/etc/init.d/httpd start" >> $server_hostname.$ref.sh
   #write command to cleanup if needed into servername.ref.sh
 
   #run servername.ref.sh remotely on each server with ssh
-  #example: ssh root@servername 'bash -s' < commandlist.sh
+  log_string="Moving remote script to $server_hostname"
+  logger
   scp $server_hostname.$ref.sh root@$server_hostname:$deployroot/$ref/
-  ssh root@$server_hostname chmod 700 $deployroot/$ref/$server_hostname.$ref.sh
-  ssh root@$server_hostname $deployroot/$ref/$server_hostname.$ref.sh &
-  wait $!
-  #if the exit code is less then 1 (successful) remove the servername.ref.sh
+  #make sure we were successful
   if [[ $? -eq 0 ]]
   then
-      log_string="Completed remote work successfully for $server_hostname." 
-      logger
+      ssh root@$server_hostname chmod 700 $deployroot/$ref/$server_hostname.$ref.sh
+      ssh root@$server_hostname $deployroot/$ref/$server_hostname.$ref.sh &
+      wait $!
+      #if the exit code is less then 1 (successful) remove the servername.ref.sh
+      if [[ $? -eq 0 ]]
+      then
+          log_string="Completed remote work successfully for $server_hostname." 
+          logger
+          #Clean up the remote deploy data
+
+          #Grab remote log
+          grab_remote_log
+      else
+          log_string="Remote work failed for $server_hostname."
+          logger
+          #grab remote log
+          grab_remote_log
+          rm_lock
+          exit 5
+      fi
   else
-      log_string="Remote work failed for $server_hostname."
+      log_string="Failed to transfer remote script to $server_hostname"
       logger
       rm_lock
       exit 5
