@@ -187,7 +187,7 @@ function amqp-org_ApacheWebServer {
   echo "  rm -rf $deployroot/$ref/$model_name" >> $server_hostname.$ref.sh
   echo "  rm -rf $deployroot/$ref/$model_name-config" >> $server_hostname.$ref.sh
   echo "  rm -f $model_name.tar.gz" >> $server_hostname.$ref.sh
-  echo "  mv $server_hostname.$ref.sh $servername.$ref.sh.whatran" >> $server_hostname.$ref.sh
+  echo "  mv $server_hostname.$ref.sh $server_hostname.$ref.sh.whatran" >> $server_hostname.$ref.sh
   echo "}" >> $server_hostname.$ref.sh
 
   #initialize remote log
