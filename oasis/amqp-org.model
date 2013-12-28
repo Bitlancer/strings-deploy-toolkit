@@ -193,6 +193,8 @@ function amqp-org_ApacheWebServer {
   #initialize remote log
   echo "date > $remote_log" >> $server_hostname.$ref.sh
   #write deploy.sh untar command into servername.ref.sh
+  echo "remote_log_string=\"Extracting deployment.\"" >> $server_hostname.$ref.sh
+  echo "remote_logger" >> $server_hostname.$ref.sh
   echo "cd $deployroot/$ref && tar -xvf $deployroot/$ref/$model_name.tar.gz >> $remote_log" >> $server_hostname.$ref.sh
 
   #write command to stop apache into servername.ref.sh
