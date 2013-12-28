@@ -31,7 +31,7 @@ function amqp-org_ApacheWebServer {
       log_string="Repo does not exist, cloning for deployment."
       logger
       #Pull in git repo provided
-      ./deploy.sh -c -g "$repo" -r "$reposhort" -R $ref
+      ../deploy.sh -c -g "$repo" -r "$reposhort" -R $ref
       #wait for it
       wait $!
       if [[ $? -eq 0 ]]
@@ -54,7 +54,7 @@ function amqp-org_ApacheWebServer {
       log_string="Config Repo does not exist, cloning for deployment."
       logger
       #Pull in git repo provided
-      ./deploy.sh -c -g "$config_repo" -r "$config_reposhort" -R $ref
+      ../deploy.sh -c -g "$config_repo" -r "$config_reposhort" -R $ref
       #wait for it
       wait $!
       if [[ $? -eq 0 ]]
