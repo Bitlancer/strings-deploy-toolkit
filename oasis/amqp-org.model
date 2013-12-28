@@ -31,7 +31,7 @@ function amqp-org_ApacheWebServer {
       log_string="Repo does not exist, cloning for deployment."
       logger
       #Pull in git repo provided
-      ../deploy.sh -c -g "$repo" -r "$reposhort" -R $ref
+      ./deploy.sh -c -g "$repo" -r "$reposhort" -R $ref
       #wait for it
       wait $!
       if [[ $? -eq 0 ]]
@@ -54,7 +54,7 @@ function amqp-org_ApacheWebServer {
       log_string="Config Repo does not exist, cloning for deployment."
       logger
       #Pull in git repo provided
-      ../deploy.sh -c -g "$config_repo" -r "$config_reposhort" -R $ref
+      ./deploy.sh -c -g "$config_repo" -r "$config_reposhort" -R $ref
       #wait for it
       wait $!
       if [[ $? -eq 0 ]]
@@ -180,6 +180,16 @@ function amqp-org_ApacheWebServer {
   echo "      remote_log_string=\"\"" >> $server_hostname.$ref.sh
   echo "  fi" >> $server_hostname.$ref.sh
   echo "}" >> $server_hostname.$ref.sh
+  echo "function clean_remote {" >> $server_hostname.$ref.sh
+  echo "  #cleans the remote server temp deploy files" >> $server_hostname.$ref.sh
+  echo "  remote_log_string=\"Cleaning up temp deploy files.\"" >> $server_hostname.$ref.sh
+  echo "  remote_logger" >> $server_hostname.$ref.sh
+  echo "  rm -rf $deployroot/$ref/$model_name" >> $server_hostname.$ref.sh
+  echo "  rm -rf $deployroot/$ref/$model_name-config" >> $server_hostname.$ref.sh
+  echo "  rm -f $model_name.tar.gz" >> $server_hostname.$ref.sh
+  echo "  mv $server_hostname.$ref.sh $servername.$ref.sh.whatran" >> $server_hostname.$ref.sh
+  echo "}" >> $server_hostname.$ref.sh
+
   #initialize remote log
   echo "date > $remote_log" >> $server_hostname.$ref.sh
   #write deploy.sh untar command into servername.ref.sh
@@ -195,7 +205,7 @@ function amqp-org_ApacheWebServer {
   echo "else" >> $server_hostname.$ref.sh
   echo "    mkdir -p $deployroot/$ref/backup/conf" >> $server_hostname.$ref.sh
   echo "fi" >> $server_hostname.$ref.sh
-  echo "remote_log_string=\"Backing up old apache confs\"" >> $server_hostname.$ref.sh
+  echo "remote_log_string=\"Backing up old apache configs\"" >> $server_hostname.$ref.sh
   echo "remote_logger" >> $server_hostname.$ref.sh
   echo "mv /etc/httpd/conf.d/*.conf $deployroot/$ref/backup/conf/" >> $server_hostname.$ref.sh
 
@@ -217,15 +227,18 @@ echo "mv $deployroot/$ref/$model_name-config/$model_name/*.conf /etc/httpd/conf.
   echo "      remote_logger" >> $server_hostname.$ref.sh
   echo "      mv /etc/httpd/conf.d/*.conf $deployroot/$ref/$model_name-config/$model_name/" >> $server_hostname.$ref.sh
   echo "      mv $deployroot/$ref/backup/conf/*.conf /etc/httpd/conf.d/" >> $server_hostname.$ref.sh
+  echo "      remote_log_string=\"Attempting to start httpd after revert.\"" >> $server_hostname.$ref.sh
+  echo "      remote_logger" >> $server_hostname.$ref.sh
   echo "      /etc/init.d/httpd start" >> $server_hostname.$ref.sh
+  echo "      clean_remote" >> $server_hostname.$ref.sh
   echo "      exit 5" >> $server_hostname.$ref.sh
   echo "  fi" >> $server_hostname.$ref.sh
   echo "}" >> $server_hostname.$ref.sh
 
 
-#  echo "check_conf" >> $server_hostname.$ref.sh
+  echo "check_conf" >> $server_hostname.$ref.sh
 #backup apache data
-echo "if [[ -d /var/www/vhosts/$model_name ]]" >> $server_hostname.$ref.sh
+echo "if [[ -d $apachehome$model_name ]]" >> $server_hostname.$ref.sh
 echo "then" >> $server_hostname.$ref.sh
 #write command to mv old apache data to /root/deploy/backup/httpd-data into servername.ref.sh
   echo "    if [[ -d $deployroot/$ref/backup/httpd ]]" >> $server_hostname.$ref.sh
@@ -237,20 +250,40 @@ echo "then" >> $server_hostname.$ref.sh
   echo "    fi" >> $server_hostname.$ref.sh
   echo "    remote_log_string=\"Moving apache data to backup\"" >> $server_hostname.$ref.sh
   echo "    remote_logger" >> $server_hostname.$ref.sh
-  echo "    mv /var/www/vhosts/$model_name $deployroot/$ref/backup/http-data/$model_name" >> $server_hostname.$ref.sh
+  echo "    mv $apachehome$model_name $deployroot/$ref/backup/http-data/$model_name" >> $server_hostname.$ref.sh
 echo "else" >> $server_hostname.$ref.sh
 echo "    remote_log_string=\"No Apache Data to backup.\"" >> $server_hostname.$ref.sh
 echo "    remote_logger" >> $server_hostname.$ref.sh
 echo "fi" >> $server_hostname.$ref.sh
-#check that we backed up and then move in new data
-
-
+#move in new apache data
+  echo "remote_log_string=\"Moving in new Apache Data.\""
+  echo "remote_logger" >> $server_hostname.$ref.sh
+  echo "mv $deployroot/$ref/$model_name apachehome$model_name" >> $server_hostname.$ref.sh
   #write command to start apache into servername.ref.sh
   echo "remote_log_string=\"Starting httpd\"" >> $server_hostname.$ref.sh
   echo "remote_logger" >> $server_hostname.$ref.sh
   echo "/etc/init.d/httpd start" >> $server_hostname.$ref.sh
+  echo "if [[ \$? -eq 0 ]]" >> $server_hostname.$ref.sh
+  echo "then" >> $server_hostname.$ref.sh
+  echo "    remote_log_string=\"httpd started.\"" >> $server_hostname.$ref.sh
+  echo "    remote_logger" >> $server_hostname.$ref.sh
+  echo "else" >> $server_hostname.$ref.sh
+  echo "    remote_log_string=\"Could not start httpd\, reverting apache data.\"" >> $server_hostname.$ref.sh
+  echo "    remote_logger" >> $server_hostname.$ref.sh
+  echo "    mv $apachehome$model_name $deployroot/$ref/$model_name" >> $server_hostname.$ref.sh
+  echo "    mv $deployroot\$ref\backup\httpd-data\$model_name $apachehome$model_name" >> $server_hostname.$ref.sh
+  echo "    remote_log_string=\"Attempting to start httpd.\"" >> $server_hostname.$ref.sh
+  echo "    remote_logger" >> $server_hostname.$ref.sh
+  echo "/etc/init.d/httpd start" >> $server_hostname.$ref.sh
+  echo "    clean_remote" >> $server_hostname.$ref.sh
+  echo "    exit 5" >> $server_hostname.$ref.sh
+  echo "fi" >> $server_hostname.$ref.sh
   #write command to cleanup if needed into servername.ref.sh
-
+  echo "clean_remote" >> $server_hostname.$ref.sh
+  echo "remote_log_string=\"Deploy Successful.\"" >> $server_hostname.$ref.sh
+  echo "remote_logger" >> $server_hostname.$ref.sh
+  echo "exit 0" >> $server_hostname.$ref.sh
+ #end of remote script build
   #run servername.ref.sh remotely on each server with ssh
   log_string="Moving remote script to $server_hostname"
   logger
@@ -266,8 +299,7 @@ echo "fi" >> $server_hostname.$ref.sh
       then
           log_string="Completed remote work successfully for $server_hostname." 
           logger
-          #Clean up the remote deploy data
-
+          #Clean up the deploy data
           #Grab remote log
           grab_remote_log
       else
@@ -275,6 +307,7 @@ echo "fi" >> $server_hostname.$ref.sh
           logger
           #grab remote log
           grab_remote_log
+          clean_local
           rm_lock
           exit 5
       fi
@@ -284,8 +317,6 @@ echo "fi" >> $server_hostname.$ref.sh
       rm_lock
       exit 5
   fi
-  #log deployment status for server
-
  }
 
 function amqp-org_MySQLServer {
