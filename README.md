@@ -1,13 +1,13 @@
 Strings Deploy Toolkit
 =======================
 
-This is a framework built for handling application deployment and orchestration within the Bitlancer Strings PaaS. It is only currently used for application deployment but it was built to be generic enough to handle orchestration tasks such as managing online configurations for a number of services.
+This is a framework built for handling application deployment and orchestration within the Bitlancer Strings PaaS. It is currently only used for application deployment but it was built to be generic enough to handle orchestration tasks such as managing online configurations for a number of services.
 
 This framework contains enough boilerplate code to deploy a generic web application from git. To try it out, visit the [Give it a try](#give-it-a-try) section.
 
 ## Give it a try
 
-*Before you can deploy an application, make sure you have completed the application deployment setup guide described [here](github.com/Bitlancer/strings-documentation). This may have been completed for you by a Bitlancer staff member.*
+*Before you can deploy an application, make sure you have completed the steps within the [Prep for Application Deployment](github.com/Bitlancer/strings-documentation) guide. Note that this may have been completed for you by a Bitlancer staff member.*
 
 * Setup an application if you have not done so already.
 * Associate the appropriate formations with this application.
@@ -17,7 +17,7 @@ This framework contains enough boilerplate code to deploy a generic web applicat
 
 ## How it works
 
-*This section is focused on how this framework works. For a description of how deploy works within Strings, visit the [Strings documentation repository](github.com/Bitlancer/strings-documentation).*
+*This section is focused on how this framework works. For a high-level description on how application deployment works within Strings, visit the [Strings documentation repository](github.com/Bitlancer/strings-documentation).*
 
 1) Strings executes `remoteexec.sh` on one of your Jump servers passing it a series of parameters about the the application. `remoteexec.sh` will load some shared code, parse the parameters, acquire the deploy lock, and pass control off to the application deploy logic in `app.inc`.
 
