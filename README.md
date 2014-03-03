@@ -12,8 +12,10 @@ This framework contains enough boilerplate code to deploy a generic web applicat
 * Setup an application if you have not done so already.
 * Associate the appropriate formations with this application.
 * Grant the remoteexec team login and sudo privileges, and add the `remoteexec` sudo role.
-* Add a new deploy script and enter the values as they appear in the attached screenshot. If you would like to deploy your own application code, replace the repo parameter value with your own repository url.
+* Add a new deploy script and enter the values as they appear in the below screen shot. If you would like to deploy your own application code, replace the repo parameter value with your own repository url.
 * Run the new deploy script
+
+![Test](https://raw.github.com/Bitlancer/strings-documentation/master/assets/deploy-script-example.png)
 
 ## How it works
 
