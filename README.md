@@ -1,25 +1,30 @@
 Strings Deploy Toolkit
-===============================
+=======================
 
-A framework for orchestrating commands against one or more servers. This 
-framework is most often used for application deployments.
+This is a framework built for handling application deployment and orchestration within the Bitlancer Strings PaaS. It is only currently used for application deployment but it was built to be generic enough to handle orchestration tasks such as managing online configurations for a number of services.
 
-The framework contains enough boilerplate code to deploy a generic web
-application from git.
+This framework contains enough boilerplate code to deploy a generic web application from git. To try it out, visit the [Give it a try](#give-it-a-try) section.
+
+## Give it a try
+
+*Before you can deploy an application, make sure you have completed the application deployment setup guide described [here](github.com/Bitlancer/strings-documentation). This may have been completed for you by a Bitlancer staff member.*
+
+* Setup an application if you have not done so already.
+* Associate the appropriate formations with this application.
+* Grant the remoteexec team login and sudo privileges, and add the `remoteexec` sudo role.
+* Add a new deploy script and enter the values as they appear in the attached screenshot. If you would like to deploy your own application code, replace the repo parameter value with your own repository url.
+* Run the new deploy script
 
 ## How it works
 
-1) Strings executes `remoteexec.sh`
+*This section is focused on how this framework works. For a description of how deploy works within Strings, visit the [Strings documentation repository](github.com/Bitlancer/strings-documentation).*
 
-Example:
+1) Strings executes `remoteexec.sh` on one of your Jump servers passing it a series of parameters about the the application. `remoteexec.sh` will load some shared code, parse the parameters, acquire the deploy lock, and pass control off to the application deploy logic in `app.inc`.
 
-```
-remoteexec.sh --exec-id 836 --type Application --name test --server-list python.dfw01.int.example-infra.net,exampleorg::role::lamp_server,stringed::profile::apache_phpfpm,stringed::profile::mysql;anaconda.dfw01.int.example-infra.net,exampleorg::role::lamp_server,stringed::profile::apache_phpfpm,stringed::profile::mysql --verbosity 4 --repo git@github.com:Bitlancer/strings-sample-app.git
-```
 
-2) Define the deploy orchestration logic within `app.inc`. 
+2) `app.inc` contains the orchestration logic for application deployments. This includes mapping an application name to a deployment type, building a deploy package which includes code and other data, distributing the deploy package to the appropriate servers, launching the foreign `remoteexec.sh` script on the appropriate endpoint servers, and handling errors.
 
-3) Define the endpoint deploy logic within `foreign/app.inc`.
+3) The foreign `remoteexec.sh` script and accompanying `app.inc` handle setting up the application on the endpoint servers. This typically involves putting code in place, updating schemas, etc, based on the role or profiles of the servers.
 
 ## Components
 
@@ -55,5 +60,5 @@ Contains a number of shared "libraries" to assist with deployments.
 ### foreign/
 
 Contains a separate remotexec.sh and associated includes for handling
-deployments on each individual server.
+deployments on each of the endpoint servers.
 
