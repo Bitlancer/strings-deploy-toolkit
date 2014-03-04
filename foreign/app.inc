@@ -38,7 +38,7 @@ function generic_app_deploy {
     fi
   fi
 
-  b_dirs="$app_doc_root"
+  local b_dirs="$app_doc_root"
   generic_backup_restore "backup" "$BACKUP_DIR" "$b_dirs"
 
   # Deploy the code
@@ -73,7 +73,7 @@ function generic_app_restore {
   local output=""
   local app_doc_root=/var/www/html
 
-  b_dirs="$app_doc_root"
+  local b_dirs="$app_doc_root"
   generic_backup_restore "restore" "$BACKUP_DIR" "$b_dirs"
 
   # Restart apache
