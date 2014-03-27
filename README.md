@@ -28,6 +28,26 @@ This framework contains enough boilerplate code to deploy a generic web applicat
 
 3) The foreign `remoteexec.sh` script and accompanying `app.inc` handle setting up the application on the endpoint servers. This typically involves putting code in place, updating schemas, etc, based on the role or profiles of the servers.
 
+## Running Deploy from the CLI
+
+You can manually run the deploy script from the CLI. This has the advantage of providing instanteous feedback and can be helpful when debugging a deploy issue.
+
+To execute the deploy script from the CLI:
+
+* SSH to the jump server that resides in the region where your servers are located
+* Switch to the remoteexec user (sudo su - remoteexec)
+* cd /home/remoteexec
+* Pull down the deploy code (git clone git@github.com...)
+* Execute the deploy script (./remoteexec) and pass it the required params (see below)
+
+Strings passes the deploy script a number of parameters automatically when executed via the control panel. When you're running the deploy script via the CLI you need to pass the same parameters. The easiest way to get these parameters is to run the deploy through Strings control panel with the verbosity turned all the way up (--verbosity 4). The first line of output will contain the parameter list. Note that --exec-id has to be changed to prevent conflicts with existing and future deploys. When executed via the CLI --exec-id should be set to 'c' + the current time as a unix timestamp. The example below includes this change.
+
+Ex: 
+
+```
+./remoteexec.sh --exec-id c$(date +%s) --type Application --name test --server-list trenton.dfw01.int.example-infra.net,exampleorg::role::mysql_server,stringed::profile::mysql;harrisburg.dfw01.int.example-infra.net,exampleorg::role::php_app_server,stringed::profile::apache_phpfpm,strings::profile::cloudfuse --verbosity 4 --repo git@github.com:Example/wordpress.git --branch master
+```
+
 ## Components
 
 ### remoteexec.sh
